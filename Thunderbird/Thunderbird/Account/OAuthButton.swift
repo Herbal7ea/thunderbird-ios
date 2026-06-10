@@ -25,9 +25,15 @@ struct OAuthButton: View {
         do {
             error = nil
             guard let request else { return }
+            // The web authentication callback has to match the request redirect URI.
+            // Google iOS clients use the reversed client ID scheme, while other
+            // providers may use the app's bundle scheme.
+            guard let callbackScheme = URL(string: request.redirectURI)?.scheme else {
+                throw URLError(.badURL)
+            }
             let _: URL = try await webAuthenticationSession.authenticate(
                 using: request.authURL(hint: emailAddress),
-                callback: .customScheme("\(Bundle.main.schemes.first!)"),
+                callback: .customScheme(callbackScheme),
                 additionalHeaderFields: [:])
 
             // TODO: Exchange auth code for bearer or access/refresh token; for now, succeed here and return fake bearer token...
