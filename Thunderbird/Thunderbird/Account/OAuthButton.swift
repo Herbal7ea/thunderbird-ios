@@ -43,8 +43,14 @@ struct OAuthButton: View {
                 .queryItems?.first(where: { $0.name == "code" })?.value else {
                 throw URLError(.badServerResponse)
             }
-            let accessToken: String = try await URLSession.shared.token(request, code: code, codeVerifier: pkce.verifier)
-            token = .bearer(accessToken)
+            let response = try await URLSession.shared.token(request, code: code, codeVerifier: pkce.verifier)
+            // Carry the refresh token, expiry, and refresh coordinates so the token can renew itself.
+            token = Token(
+                accessToken: response.accessToken,
+                refreshToken: response.refreshToken,
+                expiry: response.expiry(),
+                tokenURI: request.tokenURI,
+                clientID: request.clientID)
         } catch {
             self.error = error
         }

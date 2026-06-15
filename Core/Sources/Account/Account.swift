@@ -105,8 +105,35 @@ extension Account {
 }
 
 extension Account {
+    /// Refresh the incoming server's OAuth access token if it has expired, updating the keychain.
+    ///
+    /// No-op for password accounts, non-expiring/legacy tokens, or tokens missing refresh data.
+    /// Drops any cached client on refresh so the next access reconnects with the new token.
+    func refreshTokenIfNeeded() async throws {
+        guard var server: Server = incomingServer,
+            case .oauth(let user, let token) = server.authorization,
+            token.isExpired(), token.isRefreshable,
+            let refreshToken: String = token.refreshToken,
+            let tokenURI: String = token.tokenURI,
+            let clientID: String = token.clientID
+        else {
+            return
+        }
+        let response: OAuth2.TokenResponse = try await URLSession.shared.refreshToken(
+            tokenURI: tokenURI, clientID: clientID, refreshToken: refreshToken)
+        let refreshed: Token = Token(
+            accessToken: response.accessToken,
+            refreshToken: response.refreshToken ?? refreshToken,  // Google omits refresh_token on refresh
+            expiry: response.expiry(),
+            tokenURI: tokenURI,
+            clientID: clientID)
+        server.authorization = .oauth(user: user, token: refreshed)  // Persists to keychain
+        Self.clients[id] = nil  // Stale client holds the old token; rebuild on next access
+    }
+
     var imapClient: IMAPClient {
         get async throws {
+            try await refreshTokenIfNeeded()
             if let client: IMAPClient = Self.clients[id] as? IMAPClient {
                 // IMAP Client already exists for account ID; reconnect and return
                 if !client.isConnected {

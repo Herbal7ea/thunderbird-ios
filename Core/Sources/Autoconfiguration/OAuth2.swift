@@ -5,6 +5,26 @@
 import Foundation
 
 public struct OAuth2: Decodable {
+    /// Decoded response from the OAuth2 token endpoint (authorization-code exchange or refresh).
+    public struct TokenResponse: Decodable, Sendable {
+        public let accessToken: String
+        public let expiresIn: Int?
+        public let refreshToken: String?
+        public let tokenType: String?
+
+        /// Absolute expiry computed from `expires_in` relative to now, if provided.
+        public func expiry(from now: Date = Date()) -> Date? {
+            expiresIn.map { now.addingTimeInterval(TimeInterval($0)) }
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case accessToken = "access_token"
+            case expiresIn = "expires_in"
+            case refreshToken = "refresh_token"
+            case tokenType = "token_type"
+        }
+    }
+
     public struct Request: Equatable {
         public let authURI: String
         public let tokenURI: String
