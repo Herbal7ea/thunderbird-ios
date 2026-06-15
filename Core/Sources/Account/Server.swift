@@ -106,15 +106,13 @@ extension IMAP.Server {
         guard server.serverProtocol == .imap else {
             throw IMAPError.serverProtocolMismatch
         }
-        guard server.authenticationType != .oAuth2 else {
-            throw IMAPError.oAuth2NotSupported
-        }
         self.init(
             IMAP.ConnectionSecurity(server.connectionSecurity),
             hostname: server.hostname,
             username: server.username,
-            password: server.authorization.rawValue,
-            port: server.port
+            password: server.authorization.rawValue,  // OAuth2 access token, when authentication is .oAuth2
+            port: server.port,
+            authentication: server.authenticationType == .oAuth2 ? .oAuth2 : .password
         )
     }
 }

@@ -56,8 +56,29 @@ public class IMAPClient {
     }
 
     /// Log in to connected IMAP server using configured ``Server`` credentials.
+    ///
+    /// Uses SASL XOAUTH2 when the server is configured for `.oAuth2`, otherwise plain `LOGIN`.
     public func login() async throws {
-        try await login(username: server.username ?? "", password: server.password ?? "")
+        switch server.authentication {
+        case .oAuth2:
+            try await authenticateXOAuth2(username: server.username ?? "", token: server.password ?? "")
+        case .password:
+            try await login(username: server.username ?? "", password: server.password ?? "")
+        }
+    }
+
+    /// Authenticate to the connected IMAP ``Server`` using a SASL XOAUTH2 bearer token.
+    public func authenticateXOAuth2(username: String, token: String) async throws {
+        logger?.info("Authenticating \(username) via XOAUTH2…")
+        let capabilities: [Capability] = try await execute(command: AuthenticateCommand(username: username, token: token))
+        if !capabilities.isEmpty {
+            // IMAP servers can return additional capabilities after authentication
+            logger?.info("Merging capabilities…")
+            for capability in capabilities {
+                self.capabilities.insert(capability)
+            }
+            logger?.info("Capabilities: \(self.capabilities)")
+        }
     }
 
     /// Log in to connected IMAP ``Server`` using locally specified credentials.
