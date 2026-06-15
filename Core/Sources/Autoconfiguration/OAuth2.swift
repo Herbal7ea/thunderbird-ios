@@ -14,6 +14,11 @@ public struct OAuth2: Decodable {
         public let hosts: [String]
         public let clientID: String
 
+        /// Build the authorization-request URL.
+        ///
+        /// - Parameters:
+        ///   - hint: Optional email address to prepopulate the provider's account picker.
+        ///   - codeChallenge: Optional PKCE `S256` challenge; pair it with the `codeVerifier` sent to ``tokenURL(_:codeVerifier:)``.
         public func authURL(hint: String? = nil, codeChallenge: String? = nil) -> URL {
             var components: URLComponents = URLComponents(string: authURI)!  // Validated during init
             components.queryItems = [
@@ -32,6 +37,10 @@ public struct OAuth2: Decodable {
             return components.url!
         }
 
+        /// Build the token-exchange URL for an authorization `code`.
+        ///
+        /// - Parameter codeVerifier: The PKCE verifier matching the challenge sent to ``authURL(hint:codeChallenge:)``.
+        ///   Required for native clients, which have no client secret.
         public func tokenURL(_ code: String, codeVerifier: String? = nil) -> URL {
             var components: URLComponents = URLComponents(string: tokenURI)!  // Validated during init
             components.queryItems = [
