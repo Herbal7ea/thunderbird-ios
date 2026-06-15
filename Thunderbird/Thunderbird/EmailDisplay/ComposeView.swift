@@ -4,11 +4,14 @@
 
 import Account
 import EmailAddress
+import InfomaniakRichHTMLEditor
 import MIME
 import SMTP
 import SwiftUI
 
 /// Compose and directly send a new message through the account's outgoing (SMTP) server.
+///
+/// The body is edited with Infomaniak's `RichHTMLEditor` and sent as `text/html`.
 ///
 /// Phase 3 scope: new messages only (reply/forward is Phase 4) and direct send with inline result
 /// (the persisted outbox/queue is Phase 7).
@@ -21,9 +24,11 @@ struct ComposeView: View {
     @State private var cc: String = ""
     @State private var bcc: String = ""
     @State private var subject: String = ""
-    @State private var messageBody: String = ""
+    @State private var html: String = ""
     @State private var phase: Phase = .editing
     @State private var errorMessage: String?
+
+    @StateObject private var textAttributes = TextAttributes()
 
     private enum Phase: Equatable {
         case editing
@@ -39,27 +44,42 @@ struct ComposeView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
+            VStack(spacing: 0) {
+                VStack(spacing: 0) {
                     addressField("To", text: $to)
+                    Divider()
                     addressField("Cc", text: $cc)
+                    Divider()
                     addressField("Bcc", text: $bcc)
-                }
-                Section {
-                    TextField("Subject", text: $subject)
-                        .autocorrectionDisabled()
-                }
-                Section {
-                    TextField("Message", text: $messageBody, axis: .vertical)
-                        .lineLimit(8...)
-                }
-                if let errorMessage {
-                    Section {
-                        Text(errorMessage)
-                            .font(.footnote)
-                            .foregroundStyle(.red)
+                    Divider()
+                    HStack {
+                        Text("Subject")
+                            .foregroundStyle(.secondary)
+                            .frame(width: 64, alignment: .leading)
+                        TextField("Subject", text: $subject)
+                            .autocorrectionDisabled()
                     }
+                    .padding(.vertical, 10)
+                    Divider()
                 }
+                .padding(.horizontal)
+
+                RichHTMLEditor(html: $html, textAttributes: textAttributes)
+                    .editorScrollable(true)
+                    .padding(.horizontal, 8)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal)
+                        .padding(.bottom, 4)
+                }
+
+                Divider()
+                formatBar
             }
             .disabled(phase == .sending)
             .navigationTitle("New Message")
@@ -80,16 +100,40 @@ struct ComposeView: View {
         }
     }
 
+    /// A persistent formatting bar; each button reflects and toggles the current selection's style.
+    private var formatBar: some View {
+        HStack(spacing: 22) {
+            formatButton("bold", isActive: textAttributes.hasBold) { textAttributes.bold() }
+            formatButton("italic", isActive: textAttributes.hasItalic) { textAttributes.italic() }
+            formatButton("underline", isActive: textAttributes.hasUnderline) { textAttributes.underline() }
+            formatButton("strikethrough", isActive: textAttributes.hasStrikethrough) { textAttributes.strikethrough() }
+            formatButton("list.bullet", isActive: textAttributes.hasUnorderedList) { textAttributes.unorderedList() }
+            formatButton("list.number", isActive: textAttributes.hasOrderedList) { textAttributes.orderedList() }
+        }
+        .font(.body)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity)
+    }
+
+    private func formatButton(_ systemImage: String, isActive: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .foregroundStyle(isActive ? Color.accentColor : Color.primary)
+        }
+        .buttonStyle(.plain)
+    }
+
     private func addressField(_ label: String, text: Binding<String>) -> some View {
         HStack {
             Text(label)
                 .foregroundStyle(.secondary)
-                .frame(width: 44, alignment: .leading)
+                .frame(width: 64, alignment: .leading)
             TextField("name@example.com", text: text)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .keyboardType(.emailAddress)
         }
+        .padding(.vertical, 10)
     }
 
     /// Split a comma-separated field into addresses, ignoring blanks.
@@ -105,8 +149,8 @@ struct ComposeView: View {
         errorMessage = nil
         phase = .sending
         do {
-            let part = try MIME.Part(data: Data(messageBody.utf8), contentType: .text(.plain, .utf8))
-            let body = try MIME.Body(parts: [part], contentType: .text(.plain, .utf8))
+            let part = try MIME.Part(data: Data(html.utf8), contentType: .text(.html, .utf8))
+            let body = try MIME.Body(parts: [part], contentType: .text(.html, .utf8))
             let email = SMTP.Email(
                 sender: sender,
                 recipients: recipients(to),
