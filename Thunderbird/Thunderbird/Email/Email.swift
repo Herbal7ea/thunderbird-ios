@@ -40,6 +40,49 @@ final class Email {
     /// True when the message belongs to a conversation/thread.
     var isThread: Bool { threadID != nil }
 
+    /// Direct initializer for previews and tests.
+    init(
+        id: String = UUID().uuidString,
+        accountID: UUID = UUID(),
+        mailbox: String = "INBOX",
+        uid: Int = 0,
+        uidValidity: Int = 0,
+        subject: String,
+        from: [EmailAddress] = [],
+        sender: [EmailAddress] = [],
+        replyTo: [EmailAddress] = [],
+        to: [EmailAddress] = [],
+        cc: [EmailAddress] = [],
+        bcc: [EmailAddress] = [],
+        date: Date = .now,
+        isUnread: Bool = false,
+        isFlagged: Bool = false,
+        threadID: String? = nil,
+        messageID: String? = nil,
+        bodyText: String? = nil,
+        hasAttachments: Bool = false
+    ) {
+        self.id = id
+        self.accountID = accountID
+        self.mailbox = mailbox
+        self.uid = uid
+        self.uidValidity = uidValidity
+        self.subject = subject
+        self.from = from
+        self.sender = sender
+        self.replyTo = replyTo
+        self.to = to
+        self.cc = cc
+        self.bcc = bcc
+        self.date = date
+        self.isUnread = isUnread
+        self.isFlagged = isFlagged
+        self.threadID = threadID
+        self.messageID = messageID
+        self.bodyText = bodyText
+        self.hasAttachments = hasAttachments
+    }
+
     init(_ data: EmailData) {
         self.id = data.id
         self.accountID = data.accountID

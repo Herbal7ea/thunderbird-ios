@@ -9,28 +9,17 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/
 
 import SwiftUI
+import SwiftData
 import Account
 
 struct EmailListView: View {
     @Environment(Accounts.self) private var accounts: Accounts
-    let tempEmails = TempEmail.sampleData
+    @Environment(\.modelContext) private var modelContext
+    @Query(sort: \Email.date, order: .reverse) private var emails: [Email]
+    @State private var inbox: Inbox?
     @State var editMode: EditMode = .inactive
-    @State private var selections = Set<UUID>()
+    @State private var selections = Set<String>()
     @State private var showDrawer = false
-
-    //Hardcoded for testing
-    let attributedString = try? NSMutableAttributedString(
-        data: Data(
-            """
-            <html>
-            <body>
-            <h2>This is a test email with a bit of text</h2>
-            <p>Its doing its best to model how an email might look</p>
-            </body>
-            </html>
-            """.utf8),
-        options: [.documentType: NSAttributedString.DocumentType.html], documentAttributes: nil
-    )
 
     func sortEmails() {
         //Not yet implemented
@@ -39,40 +28,57 @@ struct EmailListView: View {
     }
 
     func selectAll() {
-        for tempEmail in tempEmails {
-            selections.insert(tempEmail.uuid)
-        }
+        selections = Set(emails.map(\.id))
     }
 
-    //TODO: replace with backend unread state call
+    //TODO: also store \Seen on the server (Phase 3)
     func markAllRead() {
-        for tempEmail in tempEmails {
-            tempEmail.unread = false
-            tempEmail.newEmail = false
+        for email in emails {
+            email.isUnread = false
         }
+        try? modelContext.save()
+    }
+
+    private func loadInbox() async {
+        if inbox == nil, let account = accounts.allAccounts.first {
+            inbox = Inbox(account: account, modelContext: modelContext)
+        }
+        await inbox?.refresh()
     }
 
     var body: some View {
         NavigationStack {
             ZStack(alignment: .bottomTrailing) {
-                if tempEmails.isEmpty {
-                    VStack {
-                        Text("empty_inbox")
-                            .padding(.bottom, 5)
-                        Text("new_messages_will_appear")
-                            .padding(.bottom, 10)
-                        Button {
-                            //Do Nothing
-                        } label: {
-                            Text("add_another_account")
-                        }.buttonBorderShape(.capsule)
-                            .buttonStyle(.bordered)
-                            .foregroundStyle(.black)
-                        Spacer()
-                    }.frame(maxWidth: .infinity, maxHeight: .infinity)
+                if emails.isEmpty {
+                    if inbox?.isLoading == true {
+                        ProgressView()
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        VStack {
+                            Text("empty_inbox")
+                                .padding(.bottom, 5)
+                            Text("new_messages_will_appear")
+                                .padding(.bottom, 10)
+                            if let errorMessage = inbox?.errorMessage {
+                                Text(errorMessage)
+                                    .font(.footnote)
+                                    .foregroundStyle(.red)
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal)
+                            }
+                            Button {
+                                //Do Nothing
+                            } label: {
+                                Text("add_another_account")
+                            }.buttonBorderShape(.capsule)
+                                .buttonStyle(.bordered)
+                                .foregroundStyle(.black)
+                            Spacer()
+                        }.frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
                 } else {
                     VStack {
-                        List(tempEmails, id: \.uuid, selection: $selections) { email in
+                        List(emails, id: \.id, selection: $selections) { email in
                             NavigationLink {
                                 ReadEmailView(email)
                             } label: {
@@ -88,6 +94,9 @@ struct EmailListView: View {
                             )
                             .listRowSeparator(.hidden)
                             .navigationLinkIndicatorVisibility(.hidden)
+                        }
+                        .refreshable {
+                            await inbox?.refresh()
                         }
                     }.environment(\.editMode, $editMode)
                         .listStyle(.plain)
@@ -176,6 +185,9 @@ struct EmailListView: View {
                     }
                 }
             }
+            .task {
+                await loadInbox()
+            }
         }
     }
 }
@@ -186,4 +198,5 @@ struct EmailListView: View {
     EmailListView()
         .environment(flags)
         .environment(accounts)
+        .modelContainer(for: Email.self, inMemory: true)
 }
