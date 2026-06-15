@@ -157,6 +157,12 @@ public class IMAPClient {
         return try await execute(command: StatusCommand(mailbox.path.name, attributes: .standard + .extended(capabilities)))
     }
 
+    /// Mark a message as read by adding the `\Seen` flag, by ``UID``, in the selected mailbox.
+    public func markSeen(uid: UID) async throws {
+        logger?.info("Marking UID \(uid) as seen…")
+        try await execute(command: UIDStoreCommand(UIDSet(uid), data: .flags(.add(silent: true, list: [.seen]))))
+    }
+
     /// Expunge messages flagged as deleted in current working mailbox.
     public func expunge() async throws {
         logger?.info("Expunging selected mailbox…")

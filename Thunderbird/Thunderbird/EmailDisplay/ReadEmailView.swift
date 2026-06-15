@@ -10,6 +10,7 @@
 
 import SwiftUI
 import WebKit
+import Account
 import EmailAddress
 
 struct ReadEmailView: View {
@@ -17,6 +18,25 @@ struct ReadEmailView: View {
         self.email = email
     }
     private var email: Email
+    @Environment(Accounts.self) private var accounts: Accounts
+    @Environment(\.modelContext) private var modelContext
+    @State private var isLoadingBody = false
+
+    /// Fetch the full body on open (once), persist it, and mark the message read.
+    private func loadBody() async {
+        guard email.bodyText == nil, let account = accounts.allAccounts.first else { return }
+        isLoadingBody = true
+        defer { isLoadingBody = false }
+        do {
+            let body = try await MessageManager(account: account).fetchBody(mailbox: email.mailbox, uid: email.uid)
+            email.bodyText = body.displayHTML ?? ""
+            email.hasAttachments = body.hasAttachments
+            email.isUnread = false
+            try? modelContext.save()
+        } catch {
+            // Leave the body empty; the web view simply shows nothing.
+        }
+    }
 
     var body: some View {
         NavigationView {
@@ -33,11 +53,16 @@ struct ReadEmailView: View {
                 ScrollView {
                     VStack(alignment: .leading) {
                         SenderView(email: email)
-                        WebView(htmlString: email.bodyText ?? "").scaledToFill()  // Body fetched in Milestone E
+                        if isLoadingBody && (email.bodyText ?? "").isEmpty {
+                            ProgressView().frame(maxWidth: .infinity)
+                        }
+                        WebView(htmlString: email.bodyText ?? "").scaledToFill()
                     }
                 }
 
-            }.padding()
+            }
+            .task { await loadBody() }
+            .padding()
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button(action: {
@@ -371,4 +396,6 @@ struct ContactCellView: View {
     )
 
     ReadEmailView(email)
+        .environment(Accounts())
+        .modelContainer(for: Email.self, inMemory: true)
 }

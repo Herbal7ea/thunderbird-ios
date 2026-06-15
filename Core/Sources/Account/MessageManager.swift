@@ -41,6 +41,28 @@ public final class MessageManager {
             .map { EmailData(accountID: account.id, mailbox: mailboxName, uidValidity: uidValidity, message: $0.value) }
     }
 
+    /// Fetch and extract the full body (HTML/plain text + attachment metadata) of a message by UID,
+    /// optionally marking it `\Seen`.
+    ///
+    /// Selects `mailbox`, fetches the complete message for `uid`, and walks its MIME tree.
+    public func fetchBody(mailbox: String, uid: Int, markSeen: Bool = true) async throws -> MessageBody {
+        guard account.emailProtocol == .imap else {
+            return MessageBody(html: nil, plainText: nil, attachments: [])
+        }
+        let client: IMAPClient = try await account.imapClient
+        let mailboxes: [(IMAP.Mailbox, IMAP.Mailbox.Status?)] = try await client.list()
+        guard let target: IMAP.Mailbox = mailboxes.first(where: { $0.0.path.name.description == mailbox })?.0 else {
+            throw IMAPError.commandFailed("Mailbox \(mailbox) not found")
+        }
+        try await client.select(mailbox: target)
+        let imapUID = UID(rawValue: UInt32(uid))
+        let message: Message = try await client.fetch(uid: imapUID, attributes: .complete)
+        if markSeen {
+            try? await client.markSeen(uid: imapUID)
+        }
+        return MessageBody(message)
+    }
+
     /// Diagnostic: print the subjects of the most recent `count` INBOX messages (temporary, until
     /// the inbox list view is wired in Milestone D).
     public func printTopSubjects(_ count: Int = 10) async {
