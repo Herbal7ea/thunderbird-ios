@@ -121,8 +121,8 @@
         <div class="accordion-content">
           <p>A presented composer wired to the (currently disabled) compose button in <code>EmailListView</code>.</p>
           <ol class="steps">
-            <li><strong>Fields</strong> — to / cc / bcc / subject / plain-text body (rich text later).</li>
-            <li><strong>Build</strong> — assemble an <code>SMTP.Email</code> with the account identity as sender and a <code>MIME.Body</code> from the text.</li>
+            <li><strong>Fields</strong> — to / cc / bcc / subject / rich-text body (<a href="https://github.com/Infomaniak/swift-rich-html-editor">Infomaniak <code>RichHTMLEditor</code></a>) with a bold / italic / underline / list formatting bar.</li>
+            <li><strong>Build</strong> — assemble an <code>SMTP.Email</code> with the account identity as sender and a <code>text/html</code> <code>MIME.Body</code> from the editor's HTML.</li>
             <li><strong>Send</strong> — call the send service; show inline sending / success / error state; dismiss on success.</li>
           </ol>
         </div>
