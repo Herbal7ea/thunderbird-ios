@@ -183,23 +183,25 @@ user=&lt;email&gt;^Aauth=Bearer &lt;access_token&gt;^A^A</code></pre>
     </table></div>
     <div class="callout warning"><span class="ci">🔐</span><span class="ct"><strong>Verification</strong> <code>https://mail.google.com/</code> is a restricted scope. A public/production app using it requires Google OAuth verification (and likely a security assessment). For development with test users it works without verification.</span></div>
 
-    <h2 id="limitations">Known limitations (Phase 1)</h2>
+    <h2 id="limitations">Known limitations</h2>
+    <div class="callout success"><span class="ci">✓</span><span class="ct"><strong>Resolved in Phase 2 · Milestone A</strong> Token refresh/persistence and fast XOAUTH2 failure handling have landed — see <a href="#phase2">Phase 2 scope</a>.</span></div>
     <div class="grid grid-2">
-      <div class="card"><span class="badge warning">auth failure can hang</span><p style="margin:.5rem 0 0;">On a rejected token, Gmail returns a SASL continuation rather than an immediate <code>NO</code>. <code>AuthenticateCommand</code> only handles the SASL-IR happy path, so a bad token waits out the 60s command timeout instead of failing fast.</p></div>
-      <div class="card"><span class="badge warning">no token refresh</span><p style="margin:.5rem 0 0;">The refresh token isn't persisted. Reopening the app after the ~1h access-token lifetime will fail to connect until re-authentication.</p></div>
-      <div class="card"><span class="badge">no inbox UI</span><p style="margin:.5rem 0 0;">Subjects go to <code>print()</code>. The list view (<code>EmailListView</code>) still renders mocked <code>TempEmail.sampleData</code>.</p></div>
+      <div class="card"><span class="badge success">resolved · auth failure</span><p style="margin:.5rem 0 0;"><s>A rejected token stalled until the 60s timeout.</s> <code>AuthenticateCommand</code>'s handler now treats the SASL error challenge / tagged <code>NO</code> as a typed <code>authenticationFailed</code>, failing fast.</p></div>
+      <div class="card"><span class="badge success">resolved · token refresh</span><p style="margin:.5rem 0 0;"><s>The refresh token wasn't persisted.</s> <code>Token</code> now carries the refresh token + expiry (keychain), and <code>Account</code> refreshes before connecting and on rejection.</p></div>
+      <div class="card"><span class="badge warning">no inbox UI (Phase 2)</span><p style="margin:.5rem 0 0;">Subjects still go to <code>print()</code>. The list view (<code>EmailListView</code>) renders mocked <code>TempEmail.sampleData</code> until Milestones B–D land.</p></div>
       <div class="card"><span class="badge">temporary trigger</span><p style="margin:.5rem 0 0;">The print is fired from <code>AccountInformation</code> right after save — a deliberately temporary call site removed when the list view is wired.</p></div>
     </div>
 
     <h2 id="phase2">Phase 2 scope</h2>
-    <p>Phase 1 produced the reusable foundation; Phase 2 turns the printed subjects into a real, durable inbox.</p>
+    <p>Phase 1 produced the reusable foundation; Phase 2 turns the printed subjects into a real, durable inbox. Decisions: persisted <strong>SwiftData</strong> model · <strong>list + full reading</strong> · <strong>token refresh in scope</strong>. Delivered one commit per milestone.</p>
     <ol class="steps">
-      <li><strong>Map IMAP → UI</strong> — convert <code>IMAP.Message</code>/<code>Envelope</code> into the model <code>EmailCellView</code>/<code>EmailListView</code> render, replacing <code>TempEmail.sampleData</code> with live data from <code>MessageManager</code>.</li>
-      <li><strong>Persist &amp; refresh tokens</strong> — store the <code>refresh_token</code> and exchange it for new access tokens on expiry (extend <code>Token</code>/<code>Authorization</code> beyond <code>.bearer</code>).</li>
-      <li><strong>Harden XOAUTH2 failures</strong> — handle the SASL continuation/error path so a bad or expired token fails fast with a clear error (and triggers refresh).</li>
-      <li><strong>Loading &amp; error states</strong> — surface connection/auth/fetch errors in the UI instead of the console.</li>
-      <li><strong>Incremental sync</strong> — fetch by UID, paginate, and keep the list fresh (IDLE / refresh).</li>
+      <li><span class="badge success">done</span> <strong>A · Token durability</strong> — <code>Token</code> carries refresh token + expiry + self-refresh coordinates (keychain); <code>Account</code> refreshes before connect and force-refreshes on rejection; XOAUTH2 failures fail fast.</li>
+      <li><span class="badge">B</span> <strong>Email model + SwiftData</strong> — an <code>Email</code> <code>@Model</code> keyed by account + uidValidity + UID, with an <code>IMAP.Message → Email</code> mapper (incl. <code>EmailAddressProtocol → EmailAddress</code>). SwiftData is app-layer; Core stays platform-neutral.</li>
+      <li><span class="badge">C</span> <strong>Inbox data source</strong> — promote <code>MessageManager</code> to an <code>@Observable</code>: select INBOX, fetch newest page, persist, expose loading/error/empty + refresh + pagination (off-main, correct <code>ModelContext</code> isolation).</li>
+      <li><span class="badge">D</span> <strong>List UI wiring</strong> — point <code>EmailListView</code>/<code>EmailCellView</code> at a SwiftData <code>@Query</code>; wire selection, unread/pin, sort, mark-all-read, sign-out to real stores.</li>
+      <li><span class="badge">E</span> <strong>Message reading</strong> — fetch <code>.complete</code> + MIME-parse the body and attachments for <code>ReadEmailView</code>; mark <code>\Seen</code> on open.</li>
     </ol>
+    <p style="font-size:.85rem;color:hsl(var(--muted-foreground));margin-top:.5rem;">Deferred to Phase 3: IDLE/push refresh, compose/send (SMTP XOAUTH2), multi-account switching polish.</p>
 
     <div class="page-nav">
       <a class="pn-prev" href="../data-flows.html"><small>Related</small>← Runtime Flows</a>
