@@ -14,7 +14,7 @@ public struct OAuth2: Decodable {
         public let hosts: [String]
         public let clientID: String
 
-        public func authURL(hint: String? = nil) -> URL {
+        public func authURL(hint: String? = nil, codeChallenge: String? = nil) -> URL {
             var components: URLComponents = URLComponents(string: authURI)!  // Validated during init
             components.queryItems = [
                 URLQueryItem(name: "client_id", value: clientID),
@@ -25,10 +25,14 @@ public struct OAuth2: Decodable {
             if let hint, !hint.isEmpty {  // Prepopulate email address for specific user
                 components.queryItems?.append(URLQueryItem(name: "login_hint", value: hint))
             }
+            if let codeChallenge, !codeChallenge.isEmpty {  // PKCE challenge for native clients (RFC 7636)
+                components.queryItems?.append(URLQueryItem(name: "code_challenge", value: codeChallenge))
+                components.queryItems?.append(URLQueryItem(name: "code_challenge_method", value: "S256"))
+            }
             return components.url!
         }
 
-        public func tokenURL(_ code: String) -> URL {
+        public func tokenURL(_ code: String, codeVerifier: String? = nil) -> URL {
             var components: URLComponents = URLComponents(string: tokenURI)!  // Validated during init
             components.queryItems = [
                 URLQueryItem(name: "client_id", value: clientID),
@@ -37,6 +41,9 @@ public struct OAuth2: Decodable {
                 URLQueryItem(name: "grant_type", value: "authorization_code"),
                 URLQueryItem(name: "code", value: code)
             ]
+            if let codeVerifier, !codeVerifier.isEmpty {  // PKCE verifier paired with the auth-time challenge
+                components.queryItems?.append(URLQueryItem(name: "code_verifier", value: codeVerifier))
+            }
             return components.url!
         }
 

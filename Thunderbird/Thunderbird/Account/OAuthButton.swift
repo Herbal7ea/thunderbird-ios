@@ -31,13 +31,20 @@ struct OAuthButton: View {
             guard let callbackScheme = URL(string: request.redirectURI)?.scheme else {
                 throw URLError(.badURL)
             }
-            let _: URL = try await webAuthenticationSession.authenticate(
-                using: request.authURL(hint: emailAddress),
+            // PKCE binds this authorization request to the token exchange (no client secret).
+            let pkce = PKCE()
+            let callback: URL = try await webAuthenticationSession.authenticate(
+                using: request.authURL(hint: emailAddress, codeChallenge: pkce.challenge),
                 callback: .customScheme(callbackScheme),
                 additionalHeaderFields: [:])
 
-            // TODO: Exchange auth code for bearer or access/refresh token; for now, succeed here and return fake bearer token...
-            token = .bearer("fake-1e911257e86b1f194daa-0-a89faae5c11f")
+            // Extract the authorization code from the callback URL and exchange it for a real access token.
+            guard let code = URLComponents(url: callback, resolvingAgainstBaseURL: false)?
+                .queryItems?.first(where: { $0.name == "code" })?.value else {
+                throw URLError(.badServerResponse)
+            }
+            let accessToken: String = try await URLSession.shared.token(request, code: code, codeVerifier: pkce.verifier)
+            token = .bearer(accessToken)
         } catch {
             self.error = error
         }
