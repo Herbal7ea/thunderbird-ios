@@ -108,16 +108,23 @@ extension Account {
     /// Refresh the incoming server's OAuth access token if it has expired, updating the keychain.
     ///
     /// No-op for password accounts, non-expiring/legacy tokens, or tokens missing refresh data.
-    /// Drops any cached client on refresh so the next access reconnects with the new token.
     func refreshTokenIfNeeded() async throws {
+        try await refreshToken(force: false)
+    }
+
+    /// Refresh the incoming server's OAuth access token, updating the keychain and dropping any
+    /// cached client (which holds the stale token). When `force` is false, refreshes only if the
+    /// token is at/near expiry. Returns `true` if a refresh was performed.
+    @discardableResult
+    func refreshToken(force: Bool) async throws -> Bool {
         guard var server: Server = incomingServer,
             case .oauth(let user, let token) = server.authorization,
-            token.isExpired(), token.isRefreshable,
+            force || token.isExpired(), token.isRefreshable,
             let refreshToken: String = token.refreshToken,
             let tokenURI: String = token.tokenURI,
             let clientID: String = token.clientID
         else {
-            return
+            return false
         }
         let response: OAuth2.TokenResponse = try await URLSession.shared.refreshToken(
             tokenURI: tokenURI, clientID: clientID, refreshToken: refreshToken)
@@ -128,30 +135,45 @@ extension Account {
             tokenURI: tokenURI,
             clientID: clientID)
         server.authorization = .oauth(user: user, token: refreshed)  // Persists to keychain
-        Self.clients[id] = nil  // Stale client holds the old token; rebuild on next access
+        try? (Self.clients[id] as? IMAPClient)?.disconnect()  // Tear down the stale connection
+        Self.clients[id] = nil  // Rebuild with the new token on next access
+        return true
     }
 
     var imapClient: IMAPClient {
         get async throws {
             try await refreshTokenIfNeeded()
-            if let client: IMAPClient = Self.clients[id] as? IMAPClient {
-                // IMAP Client already exists for account ID; reconnect and return
-                if !client.isConnected {
-                    try await client.connect()
-                    try await client.login()
+            do {
+                return try await connectedIMAPClient()
+            } catch let error as IMAPError {
+                // A non-expired token can still be rejected (revocation, clock skew). Force one
+                // refresh and retry; if there's nothing to refresh, surface the original error.
+                guard case .authenticationFailed = error, try await refreshToken(force: true) else {
+                    throw error
                 }
-                return client
-            } else {
-                // No client exists for account ID; make a new one, connect and return
-                guard let incomingServer else {
-                    throw IMAPError.serverProtocolMismatch
-                }
-                let client: IMAPClient = IMAPClient(try IMAP.Server(incomingServer))
+                return try await connectedIMAPClient()
+            }
+        }
+    }
+
+    private func connectedIMAPClient() async throws -> IMAPClient {
+        if let client: IMAPClient = Self.clients[id] as? IMAPClient {
+            // IMAP Client already exists for account ID; reconnect and return
+            if !client.isConnected {
                 try await client.connect()
                 try await client.login()
-                Self.clients[id] = client  // Donate to shared pool
-                return client
             }
+            return client
+        } else {
+            // No client exists for account ID; make a new one, connect and return
+            guard let incomingServer else {
+                throw IMAPError.serverProtocolMismatch
+            }
+            let client: IMAPClient = IMAPClient(try IMAP.Server(incomingServer))
+            try await client.connect()
+            try await client.login()
+            Self.clients[id] = client  // Donate to shared pool
+            return client
         }
     }
 
