@@ -75,6 +75,9 @@ struct AccountInformation: View {
                         outgoingServerInfo.authorization = loginServer.authorization
                         account.servers = [incomingServerInfo, outgoingServerInfo]
                         accounts.set(account)
+                        // Phase 1: confirm OAuth + IMAP works by printing the top 10 INBOX subjects.
+                        let savedAccount = account
+                        Task { await MessageManager(account: savedAccount).printTopSubjects() }
                     }
                 }
             }
