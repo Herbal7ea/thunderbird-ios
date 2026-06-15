@@ -20,6 +20,7 @@ struct EmailListView: View {
     @State var editMode: EditMode = .inactive
     @State private var selections = Set<String>()
     @State private var showDrawer = false
+    @State private var showCompose = false
 
     func sortEmails() {
         //Not yet implemented
@@ -103,7 +104,7 @@ struct EmailListView: View {
                         .scrollContentBackground(.hidden)
                 }
                 Button {
-                    // Action
+                    showCompose = true
                 } label: {
                     Image("compose")
                         .font(.title.weight(.regular))
@@ -115,7 +116,7 @@ struct EmailListView: View {
                 }
                 .background(.clear)
                 .padding()
-                .disabled(true)
+                .disabled(accounts.allAccounts.first == nil)
                 DrawerView(showDrawer: $showDrawer)
             }
             .navigationTitle("inbox_header")
@@ -187,6 +188,11 @@ struct EmailListView: View {
             }
             .task {
                 await loadInbox()
+            }
+            .sheet(isPresented: $showCompose) {
+                if let account = accounts.allAccounts.first {
+                    ComposeView(account: account)
+                }
             }
         }
     }

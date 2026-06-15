@@ -117,7 +117,24 @@ extension Account {
     /// token is at/near expiry. Returns `true` if a refresh was performed.
     @discardableResult
     func refreshToken(force: Bool) async throws -> Bool {
-        guard var server: Server = incomingServer,
+        try await refreshToken(for: incomingServer, force: force)
+    }
+
+    /// Refresh the outgoing (SMTP) server's OAuth access token before sending.
+    ///
+    /// SMTP stores its credential in a separate keychain entry from IMAP, so the outgoing token is
+    /// refreshed independently of ``refreshToken(force:)``. No-op for password/legacy accounts.
+    @discardableResult
+    func refreshOutgoingTokenIfNeeded(force: Bool = false) async throws -> Bool {
+        try await refreshToken(for: outgoingServer, force: force)
+    }
+
+    /// Refresh `server`'s OAuth access token, persisting the result to its keychain entry. When the
+    /// refreshed server is the incoming server, also drops the cached IMAP client (which holds the
+    /// stale token). Returns `true` if a refresh was performed.
+    @discardableResult
+    private func refreshToken(for server: Server?, force: Bool) async throws -> Bool {
+        guard var server: Server = server,
             case .oauth(let user, let token) = server.authorization,
             force || token.isExpired(), token.isRefreshable,
             let refreshToken: String = token.refreshToken,
@@ -135,8 +152,10 @@ extension Account {
             tokenURI: tokenURI,
             clientID: clientID)
         server.authorization = .oauth(user: user, token: refreshed)  // Persists to keychain
-        try? (Self.clients[id] as? IMAPClient)?.disconnect()  // Tear down the stale connection
-        Self.clients[id] = nil  // Rebuild with the new token on next access
+        if server.id == incomingServer?.id {
+            try? (Self.clients[id] as? IMAPClient)?.disconnect()  // Tear down the stale connection
+            Self.clients[id] = nil  // Rebuild with the new token on next access
+        }
         return true
     }
 

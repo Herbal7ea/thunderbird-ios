@@ -150,10 +150,12 @@ extension SMTP.Server {
         guard server.connectionSecurity != .tls else {
             throw SMTPError.requiredTLSNotConfigured
         }
-        guard server.authenticationType != .oAuth2 else {
-            throw SMTPError.serverProtocolMismatch
-        }
-        self.init(hostname: server.hostname, username: server.username, password: server.authorization.rawValue)
+        self.init(
+            hostname: server.hostname,
+            username: server.username,
+            password: server.authorization.rawValue,  // OAuth2 access token, when authentication is .oAuth2
+            authentication: server.authenticationType == .oAuth2 ? .oAuth2 : .password
+        )
     }
 }
 

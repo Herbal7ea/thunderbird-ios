@@ -63,6 +63,26 @@ public final class MessageManager {
         return MessageBody(message)
     }
 
+    /// Send a composed message through the account's outgoing (SMTP) server.
+    ///
+    /// Refreshes the outgoing OAuth token if it is near expiry, then connects and sends over SMTP
+    /// `XOAUTH2` (or `AUTH LOGIN` for password accounts). A non-expired token that the server still
+    /// rejects triggers one forced refresh + retry, mirroring ``Account/imapClient``.
+    public func send(_ email: SMTP.Email) async throws {
+        guard account.emailProtocol == .imap, let outgoingServer = account.outgoingServer else {
+            throw SMTPError.serverProtocolMismatch
+        }
+        try await account.refreshOutgoingTokenIfNeeded()
+        do {
+            try await SMTPClient(try SMTP.Server(account.outgoingServer ?? outgoingServer)).send(email)
+        } catch SMTPError.authenticationFailed {
+            guard try await account.refreshOutgoingTokenIfNeeded(force: true) else {
+                throw SMTPError.authenticationFailed
+            }
+            try await SMTPClient(try SMTP.Server(account.outgoingServer ?? outgoingServer)).send(email)
+        }
+    }
+
     /// Diagnostic: print the subjects of the most recent `count` INBOX messages (temporary, until
     /// the inbox list view is wired in Milestone D).
     public func printTopSubjects(_ count: Int = 10) async {
