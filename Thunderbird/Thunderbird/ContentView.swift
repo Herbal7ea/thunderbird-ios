@@ -37,11 +37,10 @@ struct ContentView: View {
                 hasAuthorization = false
                 return
             }
-            hasAuthorization =
-                accounts
-                .allAccounts[0].incomingServer?.authorization != nil
-                && accounts
-                    .allAccounts[0].outgoingServer?.authorization != nil
+            hasAuthorization = accounts.allAccounts.contains { account in
+                account.incomingServer?.authorization != nil
+                    && account.outgoingServer?.authorization != nil
+            }
             isPresented = false
         }
         .task {

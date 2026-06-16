@@ -23,6 +23,22 @@ struct EmailListView: View {
     @State private var showDrawer = false
     @State private var showCompose = false
     @State private var showOutbox = false
+    /// Persisted across launches; identifies the account whose INBOX is shown (Phase 8).
+    @AppStorage("selectedAccountID") private var selectedAccountID: String = ""
+
+    /// The account currently being viewed: the stored selection if still valid, else the first.
+    private var selectedAccount: Account? {
+        if let id = UUID(uuidString: selectedAccountID), let account = accounts.account(for: id) {
+            return account
+        }
+        return accounts.allAccounts.first
+    }
+
+    /// Messages belonging to the selected account (the `@Query` spans all accounts).
+    private var displayedEmails: [Email] {
+        guard let id = selectedAccount?.id else { return [] }
+        return emails.filter { $0.accountID == id }
+    }
 
     func sortEmails() {
         //Not yet implemented
@@ -31,19 +47,21 @@ struct EmailListView: View {
     }
 
     func selectAll() {
-        selections = Set(emails.map(\.id))
+        selections = Set(displayedEmails.map(\.id))
     }
 
     //TODO: also store \Seen on the server (Phase 3)
     func markAllRead() {
-        for email in emails {
+        for email in displayedEmails {
             email.isUnread = false
         }
         try? modelContext.save()
     }
 
     private func loadInbox() async {
-        if inbox == nil, let account = accounts.allAccounts.first {
+        guard let account = selectedAccount else { return }
+        if inbox?.account.id != account.id {  // First load, or the user switched accounts
+            inbox?.stopLiveUpdates()
             inbox = Inbox(account: account, modelContext: modelContext)
         }
         await inbox?.refresh()
@@ -53,7 +71,7 @@ struct EmailListView: View {
     var body: some View {
         NavigationStack {
             ZStack(alignment: .bottomTrailing) {
-                if emails.isEmpty {
+                if displayedEmails.isEmpty {
                     if inbox?.isLoading == true {
                         ProgressView()
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -82,7 +100,7 @@ struct EmailListView: View {
                     }
                 } else {
                     VStack {
-                        List(emails, id: \.id, selection: $selections) { email in
+                        List(displayedEmails, id: \.id, selection: $selections) { email in
                             NavigationLink {
                                 ReadEmailView(email)
                             } label: {
@@ -119,8 +137,8 @@ struct EmailListView: View {
                 }
                 .background(.clear)
                 .padding()
-                .disabled(accounts.allAccounts.first == nil)
-                DrawerView(showDrawer: $showDrawer)
+                .disabled(selectedAccount == nil)
+                DrawerView(showDrawer: $showDrawer, selectedAccountID: $selectedAccountID)
             }
             .navigationTitle("inbox_header")
             .navigationBarBackButtonHidden(editMode.isEditing)
@@ -202,8 +220,11 @@ struct EmailListView: View {
             .task {
                 await loadInbox()
             }
+            .onChange(of: selectedAccountID) {
+                Task { await loadInbox() }  // Switch the visible INBOX + live updates to the new account
+            }
             .sheet(isPresented: $showCompose) {
-                if let account = accounts.allAccounts.first {
+                if let account = selectedAccount {
                     ComposeView(account: account)
                 }
             }

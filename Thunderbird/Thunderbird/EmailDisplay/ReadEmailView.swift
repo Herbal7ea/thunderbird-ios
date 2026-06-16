@@ -24,12 +24,16 @@ struct ReadEmailView: View {
     @State private var isLoadingBody = false
     @State private var draft: MessageDraft?
 
-    /// The signed-in account's identities, used to omit self from reply-all recipients.
-    private var identities: [EmailAddress] { accounts.allAccounts.first?.identities ?? [] }
+    /// The account this message belongs to (resolved by its own `accountID`, not the active one), so
+    /// body loading and reply/forward use the right credentials and identity in a multi-account app.
+    private var account: Account? { accounts.account(for: email.accountID) ?? accounts.allAccounts.first }
+
+    /// The owning account's identities, used to omit self from reply-all recipients.
+    private var identities: [EmailAddress] { account?.identities ?? [] }
 
     /// Fetch the full body on open (once), persist it, and mark the message read.
     private func loadBody() async {
-        guard email.bodyText == nil, let account = accounts.allAccounts.first else { return }
+        guard email.bodyText == nil, let account else { return }
         isLoadingBody = true
         defer { isLoadingBody = false }
         do {
@@ -71,7 +75,7 @@ struct ReadEmailView: View {
                         }
                         WebView(htmlString: email.bodyText ?? "").scaledToFill()
                         if !email.attachments.isEmpty {
-                            AttachmentsView(email: email, account: accounts.allAccounts.first)
+                            AttachmentsView(email: email, account: account)
                                 .padding(.top)
                         }
                     }
@@ -80,7 +84,7 @@ struct ReadEmailView: View {
             }
             .task { await loadBody() }
             .sheet(item: $draft) { draft in
-                if let account = accounts.allAccounts.first {
+                if let account {
                     ComposeView(account: account, draft: draft)
                 }
             }
