@@ -136,6 +136,32 @@ struct ComposeView: View {
         .padding(.vertical, 10)
     }
 
+    /// Best-effort plain-text rendering of the editor's HTML, used as the `multipart/alternative`
+    /// fallback for clients that don't render HTML. Converts block/line tags to newlines and list
+    /// items to bullets, strips remaining tags, and decodes the common HTML entities.
+    private func plainText(fromHTML html: String) -> String {
+        var text = html
+        let tagReplacements: [(pattern: String, replacement: String)] = [
+            ("(?i)<li[^>]*>", "\n• "),
+            ("(?i)<br\\s*/?>", "\n"),
+            ("(?i)</(p|div|li|tr|h[1-6]|ul|ol|blockquote)>", "\n"),
+        ]
+        for (pattern, replacement) in tagReplacements {
+            text = text.replacingOccurrences(of: pattern, with: replacement, options: .regularExpression)
+        }
+        text = text.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+        // Decode `&amp;` last so e.g. "&amp;lt;" doesn't collapse into "<".
+        let entities: [(entity: String, character: String)] = [
+            ("&nbsp;", " "), ("&lt;", "<"), ("&gt;", ">"),
+            ("&quot;", "\""), ("&#39;", "'"), ("&apos;", "'"), ("&amp;", "&"),
+        ]
+        for (entity, character) in entities {
+            text = text.replacingOccurrences(of: entity, with: character)
+        }
+        text = text.replacingOccurrences(of: "\n{3,}", with: "\n\n", options: .regularExpression)
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     /// Split a comma-separated field into addresses, ignoring blanks.
     private func recipients(_ field: String) -> [EmailAddress] {
         field
@@ -149,8 +175,7 @@ struct ComposeView: View {
         errorMessage = nil
         phase = .sending
         do {
-            let part = try MIME.Part(data: Data(html.utf8), contentType: .text(.html, .utf8))
-            let body = try MIME.Body(parts: [part], contentType: .text(.html, .utf8))
+            let body = try MIME.Body.alternative(plainText: plainText(fromHTML: html), html: html)
             let email = SMTP.Email(
                 sender: sender,
                 recipients: recipients(to),
