@@ -25,13 +25,14 @@ public final class MessageManager: Sendable {
         self.account = account
     }
 
-    /// Fetch the most recent `count` messages from INBOX as `Sendable` ``EmailData`` snapshots,
-    /// newest first.
+    /// Fetch a page of INBOX messages as `Sendable` ``EmailData`` snapshots, newest first.
     ///
-    /// Connects (authenticating via XOAUTH2 for OAuth2 accounts), selects INBOX, and fetches the
-    /// highest `count` sequence numbers at the envelope level. Returns an empty array for non-IMAP
-    /// accounts or an empty/absent INBOX.
-    public func fetchInbox(count: Int = 50) async throws -> [EmailData] {
+    /// Connects (authenticating via XOAUTH2 for OAuth2 accounts), selects INBOX, and fetches `count`
+    /// envelope-level messages by sequence number. By default it returns the newest `count`; pass
+    /// `olderThan` (the number of newest messages already loaded) to page further back for "load
+    /// more". Returns an empty array for non-IMAP accounts, an empty/absent INBOX, or once paging has
+    /// run past the oldest message.
+    public func fetchInbox(count: Int = 50, olderThan loaded: Int = 0) async throws -> [EmailData] {
         guard account.emailProtocol == .imap else { return [] }
         let client: IMAPClient = try await account.imapClient
         let mailboxes: [(IMAP.Mailbox, IMAP.Mailbox.Status?)] = try await client.list()
@@ -44,12 +45,31 @@ public final class MessageManager: Sendable {
         let status: IMAP.Mailbox.Status = try await client.select(mailbox: inbox)
         let total: Int = status.messageCount ?? 0
         let uidValidity: Int = Int(status.uidValidityValue ?? 0)
-        guard total > 0 else { return [] }
-        let set = SequenceSet(max(1, total - count + 1)...total)
+        let upper: Int = total - loaded  // Highest sequence number in this page (skipping `loaded` newest)
+        guard upper > 0 else { return [] }
+        let set = SequenceSet(max(1, upper - count + 1)...upper)
         let messages: MessageSet = try await client.fetch(set, attributes: .standard)
         return messages
             .sorted { $0.key > $1.key }  // Newest (highest sequence number) first
             .map { EmailData(accountID: account.id, mailbox: mailboxName, uidValidity: uidValidity, message: $0.value) }
+    }
+
+    /// Add or remove the `\Seen` flag on a message server-side (local→server reconciliation).
+    public func markSeen(mailbox: String, uid: Int, _ seen: Bool) async throws {
+        try await store(mailbox: mailbox, uid: uid, flag: .seen, enabled: seen)
+    }
+
+    /// Add or remove the `\Flagged` flag on a message server-side (local→server reconciliation).
+    public func markFlagged(mailbox: String, uid: Int, _ flagged: Bool) async throws {
+        try await store(mailbox: mailbox, uid: uid, flag: .flagged, enabled: flagged)
+    }
+
+    /// Select `mailbox` and add/remove `flag` on the message with `uid`.
+    private func store(mailbox: String, uid: Int, flag: Flag, enabled: Bool) async throws {
+        guard account.emailProtocol == .imap else { return }
+        let client: IMAPClient = try await account.imapClient
+        try await select(mailbox, on: client)
+        try await client.store(uid: UID(rawValue: UInt32(uid)), flag: flag, enabled: enabled)
     }
 
     /// Fetch and extract the full body (HTML/plain text + attachment metadata) of a message by UID,

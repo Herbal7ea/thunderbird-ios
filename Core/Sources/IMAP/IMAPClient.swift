@@ -163,6 +163,16 @@ public class IMAPClient {
         try await execute(command: UIDStoreCommand(UIDSet(uid), data: .flags(.add(silent: true, list: [.seen]))))
     }
 
+    /// Add or remove a single ``Flag`` (e.g. `.seen`, `.flagged`) on a message by ``UID`` in the
+    /// selected mailbox — the building block for two-way flag reconciliation.
+    public func store(uid: UID, flag: Flag, enabled: Bool) async throws {
+        logger?.info("\(enabled ? "Adding" : "Removing") flag \(flag) on UID \(uid)…")
+        let data: StoreData = enabled
+            ? .flags(.add(silent: true, list: [flag]))
+            : .flags(.remove(silent: true, list: [flag]))
+        try await execute(command: UIDStoreCommand(UIDSet(uid), data: data))
+    }
+
     /// Expunge messages flagged as deleted in current working mailbox.
     public func expunge() async throws {
         logger?.info("Expunging selected mailbox…")

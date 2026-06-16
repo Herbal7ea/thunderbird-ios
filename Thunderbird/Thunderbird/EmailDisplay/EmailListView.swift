@@ -50,12 +50,8 @@ struct EmailListView: View {
         selections = Set(displayedEmails.map(\.id))
     }
 
-    //TODO: also store \Seen on the server (Phase 3)
     func markAllRead() {
-        for email in displayedEmails {
-            email.isUnread = false
-        }
-        try? modelContext.save()
+        inbox?.markAllRead(displayedEmails)  // Updates locally and pushes \Seen to the server (Phase 9)
     }
 
     private func loadInbox() async {
@@ -116,6 +112,30 @@ struct EmailListView: View {
                             )
                             .listRowSeparator(.hidden)
                             .navigationLinkIndicatorVisibility(.hidden)
+                            .swipeActions(edge: .leading) {
+                                Button {
+                                    inbox?.setRead(email, email.isUnread)  // Toggle read/unread (synced)
+                                } label: {
+                                    Label(
+                                        email.isUnread ? "mark_read_button" : "Mark Unread",
+                                        systemImage: email.isUnread ? "envelope.open" : "envelope.badge")
+                                }
+                                .tint(.blue)
+                            }
+                            .swipeActions(edge: .trailing) {
+                                Button {
+                                    inbox?.setFlagged(email, !email.isFlagged)  // Toggle flag (synced)
+                                } label: {
+                                    Label(email.isFlagged ? "unpin_button" : "flag_button", systemImage: "flag")
+                                }
+                                .tint(.orange)
+                            }
+                            .onAppear {
+                                // Page in older messages as the list nears its end (Phase 9).
+                                if email.id == displayedEmails.last?.id {
+                                    Task { await inbox?.loadMore() }
+                                }
+                            }
                         }
                         .refreshable {
                             await inbox?.refresh()
