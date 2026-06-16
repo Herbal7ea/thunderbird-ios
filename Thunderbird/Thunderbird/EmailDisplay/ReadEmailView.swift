@@ -10,6 +10,7 @@
 
 import SwiftUI
 import WebKit
+import QuickLook
 import Account
 import EmailAddress
 
@@ -35,6 +36,9 @@ struct ReadEmailView: View {
             let body = try await MessageManager(account: account).fetchBody(mailbox: email.mailbox, uid: email.uid)
             email.bodyText = body.displayHTML ?? ""
             email.hasAttachments = body.hasAttachments
+            email.attachments = body.attachments.map {
+                AttachmentInfo(filename: $0.filename, contentType: $0.contentType, byteCount: $0.byteCount, section: $0.section, encoding: $0.encoding)
+            }
             email.isUnread = false
             try? modelContext.save()
         } catch {
@@ -66,6 +70,10 @@ struct ReadEmailView: View {
                             ProgressView().frame(maxWidth: .infinity)
                         }
                         WebView(htmlString: email.bodyText ?? "").scaledToFill()
+                        if !email.attachments.isEmpty {
+                            AttachmentsView(email: email, account: accounts.allAccounts.first)
+                                .padding(.top)
+                        }
                     }
                 }
 
@@ -183,38 +191,109 @@ struct ReadEmailView: View {
     }
 }
 
-struct AttachmentBlockView: View {
-    init(_ attachments: [Data]) {
-        self.attachments = attachments
-    }
-    private var attachments: [Data]
+/// Lists a message's attachments and downloads them on demand (IMAP body-section fetch), opening
+/// the fetched file in Quick Look. Bytes are fetched only when the user taps a row.
+struct AttachmentsView: View {
+    let email: Email
+    let account: Account?
+    @State private var previewURL: URL?
+    @State private var downloading: Set<String> = []
+    @State private var errorMessage: String?
+
     var body: some View {
-        VStack(alignment: .leading) {
-            Text("^[\(attachments.count) attachment](inflect: true)")
+        VStack(alignment: .leading, spacing: 8) {
+            Text("^[\(email.attachments.count) attachment](inflect: true)")
                 .font(.footnote)
-            ForEach(attachments, id: \.self) { _ in
-                SingleAttachment()
+                .foregroundStyle(.secondary)
+            ForEach(email.attachments) { attachment in
+                Button {
+                    Task { await open(attachment) }
+                } label: {
+                    AttachmentRow(attachment: attachment, isLoading: downloading.contains(attachment.id))
+                }
+                .buttonStyle(.plain)
+                .disabled(account == nil)
+            }
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.caption)
+                    .foregroundStyle(.red)
             }
         }
+        .quickLookPreview($previewURL)
+    }
 
+    /// Download `attachment`'s bytes, write them to a temp file, and hand the URL to Quick Look.
+    private func open(_ attachment: AttachmentInfo) async {
+        guard let account, !downloading.contains(attachment.id) else { return }
+        downloading.insert(attachment.id)
+        defer { downloading.remove(attachment.id) }
+        errorMessage = nil
+        do {
+            let data = try await MessageManager(account: account).fetchAttachment(
+                mailbox: email.mailbox, uid: email.uid, section: attachment.section, encoding: attachment.encoding)
+            previewURL = try Self.writeTemporaryFile(data, named: attachment.filename ?? "attachment-\(attachment.id)")
+        } catch {
+            errorMessage = String(localized: "Couldn’t download \(attachment.filename ?? "attachment").")
+        }
+    }
+
+    /// Write `data` to a sanitized file in a temp directory, returning its URL for Quick Look.
+    private static func writeTemporaryFile(_ data: Data, named filename: String) throws -> URL {
+        let safe = filename.replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: ":", with: "_")
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("attachments", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent(safe.isEmpty ? "attachment" : safe)
+        try data.write(to: url, options: .atomic)
+        return url
     }
 }
 
-struct SingleAttachment: View {
-    init() {
-        //Do Stuff
-    }
+/// A single attachment row: type icon, filename, human-readable size, and a download/progress affordance.
+struct AttachmentRow: View {
+    let attachment: AttachmentInfo
+    let isLoading: Bool
+
     var body: some View {
-        HStack {
-            Image(systemName: "photo")
-                .resizable()
-                .frame(width: 56, height: 44)
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.title3)
                 .foregroundStyle(.gray)
-            VStack(alignment: .leading) {
-                Text("rockFlying.png")
-                Text("1.78 MB")
-            }.font(.footnote)
+                .frame(width: 32)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(attachment.filename ?? String(localized: "Attachment"))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text(byteCountText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            if isLoading {
+                ProgressView()
+            } else {
+                Image(systemName: "arrow.down.circle")
+                    .foregroundStyle(.accent)
+            }
         }
+        .font(.footnote)
+        .padding(.vertical, 4)
+    }
+
+    private var byteCountText: String {
+        ByteCountFormatter.string(fromByteCount: Int64(attachment.byteCount), countStyle: .file)
+    }
+
+    /// A representative SF Symbol for the attachment's content type.
+    private var icon: String {
+        let type = attachment.contentType.lowercased()
+        if type.hasPrefix("image/") { return "photo" }
+        if type.hasPrefix("video/") { return "film" }
+        if type.hasPrefix("audio/") { return "waveform" }
+        if type.contains("pdf") { return "doc.richtext" }
+        if type.contains("zip") || type.contains("compressed") { return "doc.zipper" }
+        if type.hasPrefix("text/") { return "doc.text" }
+        return "doc"
     }
 }
 

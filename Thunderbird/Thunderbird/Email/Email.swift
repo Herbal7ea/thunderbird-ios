@@ -6,6 +6,21 @@ import Account
 import Foundation
 import SwiftData
 
+/// Persisted, lightweight descriptor of a message attachment — enough to list it and to fetch its
+/// bytes on demand (``Account/MessageManager/fetchAttachment(mailbox:uid:section:encoding:)``).
+struct AttachmentInfo: Codable, Hashable, Identifiable {
+    var filename: String?
+    var contentType: String
+    var byteCount: Int
+    /// MIME body section (e.g. `[2]` → `BODY[2]`).
+    var section: [Int]
+    /// Transfer encoding raw value (e.g. `"base64"`), used to decode the fetched bytes.
+    var encoding: String?
+
+    /// Stable within a message: section numbers are unique per part.
+    var id: String { section.map(String.init).joined(separator: ".") }
+}
+
 /// Persisted message, keyed by account + mailbox + UID validity + UID.
 ///
 /// Built and updated from a ``Account/EmailData`` snapshot (mapped off the IMAP fetch). Envelope
@@ -36,6 +51,9 @@ final class Email {
     // Populated lazily when the message is opened (Milestone E).
     var bodyText: String?
     var hasAttachments: Bool
+    /// Attachment descriptors, filled in when the body is first fetched; each can be downloaded on
+    /// demand by its ``AttachmentInfo/section``.
+    var attachments: [AttachmentInfo] = []
 
     /// True when the message belongs to a conversation/thread.
     var isThread: Bool { threadID != nil }
@@ -60,7 +78,8 @@ final class Email {
         threadID: String? = nil,
         messageID: String? = nil,
         bodyText: String? = nil,
-        hasAttachments: Bool = false
+        hasAttachments: Bool = false,
+        attachments: [AttachmentInfo] = []
     ) {
         self.id = id
         self.accountID = accountID
@@ -81,6 +100,7 @@ final class Email {
         self.messageID = messageID
         self.bodyText = bodyText
         self.hasAttachments = hasAttachments
+        self.attachments = attachments
     }
 
     init(_ data: EmailData) {
@@ -103,6 +123,7 @@ final class Email {
         self.messageID = data.messageID
         self.bodyText = nil
         self.hasAttachments = false
+        self.attachments = []
     }
 
     /// Refresh server-mutable envelope fields from a newer fetch. Identity and the lazily fetched

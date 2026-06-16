@@ -233,6 +233,16 @@ public class IMAPClient {
         return try await execute(command: UIDFetchCommand(set, attributes: attributes.filtered(capabilities)))
     }
 
+    /// Fetch the raw, still-transfer-encoded bytes of a single body section by ``UID``
+    /// (e.g. `[2]` → `BODY[2]`, `[2, 1]` → `BODY[2.1]`). Returns `nil` if the server omits the
+    /// section. Decode the result with `Data.transferDecoded(_:)`.
+    public func fetch(uid: UID, section: [Int]) async throws -> Data? {
+        logger?.info("Fetching message UID \(uid) body section \(section)…")
+        let specifier = SectionSpecifier(part: SectionSpecifier.Part(section))
+        let message: Message = try await fetch(uid: uid, attributes: [.bodySection(peek: true, specifier, nil)])
+        return message.bodyPart(section)
+    }
+
     /// Fetch a specific message by ``UID``; fetches complete message by default.
     public func fetch(uid: UID, attributes: [FetchAttribute] = .complete) async throws -> Message {
         logger?.info("Fetching message UID \(uid)…")

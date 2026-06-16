@@ -61,17 +61,40 @@ public final class MessageManager: Sendable {
             return MessageBody(html: nil, plainText: nil, attachments: [])
         }
         let client: IMAPClient = try await account.imapClient
-        let mailboxes: [(IMAP.Mailbox, IMAP.Mailbox.Status?)] = try await client.list()
-        guard let target: IMAP.Mailbox = mailboxes.first(where: { $0.0.path.name.description == mailbox })?.0 else {
-            throw IMAPError.commandFailed("Mailbox \(mailbox) not found")
-        }
-        try await client.select(mailbox: target)
+        try await select(mailbox, on: client)
         let imapUID = UID(rawValue: UInt32(uid))
         let message: Message = try await client.fetch(uid: imapUID, attributes: .complete)
         if markSeen {
             try? await client.markSeen(uid: imapUID)
         }
         return MessageBody(message)
+    }
+
+    /// Fetch and transfer-decode a single attachment's bytes, on demand, by its MIME body section.
+    ///
+    /// Fetches only `BODY[<section>]` (not the whole message) for `uid`, then decodes the raw bytes
+    /// using `encoding` (the part's transfer encoding, typically `base64`). `section` and `encoding`
+    /// come from a ``MessageBody/Attachment`` produced by ``fetchBody(mailbox:uid:markSeen:)``.
+    public func fetchAttachment(mailbox: String, uid: Int, section: [Int], encoding: String?) async throws -> Data {
+        guard account.emailProtocol == .imap else {
+            throw IMAPError.commandFailed("Attachments require an IMAP account")
+        }
+        let client: IMAPClient = try await account.imapClient
+        try await select(mailbox, on: client)
+        let imapUID = UID(rawValue: UInt32(uid))
+        guard let raw: Data = try await client.fetch(uid: imapUID, section: section) else {
+            throw IMAPError.commandFailed("Attachment section \(section) not found")
+        }
+        return raw.transferDecoded(ContentTransferEncoding(rawValue: encoding ?? ""))
+    }
+
+    /// List mailboxes and select `mailbox` by name on `client`, throwing if it isn't found.
+    private func select(_ mailbox: String, on client: IMAPClient) async throws {
+        let mailboxes: [(IMAP.Mailbox, IMAP.Mailbox.Status?)] = try await client.list()
+        guard let target: IMAP.Mailbox = mailboxes.first(where: { $0.0.path.name.description == mailbox })?.0 else {
+            throw IMAPError.commandFailed("Mailbox \(mailbox) not found")
+        }
+        try await client.select(mailbox: target)
     }
 
     /// Watch INBOX for changes in real time using IMAP IDLE, on a dedicated connection.

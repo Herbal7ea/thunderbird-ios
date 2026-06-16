@@ -25,7 +25,26 @@ struct MessageBodyTests {
         #expect(extracted.plainText == "Hello")
         #expect(extracted.hasAttachments)
         #expect(extracted.attachments.first?.filename == "a.txt")
+        #expect(extracted.attachments.first?.section == [3])  // 3rd top-level part → BODY[3]
+        #expect(extracted.attachments.first?.encoding == "7bit")
         #expect(extracted.displayHTML == "<p>Hello</p>")  // Prefers HTML
+    }
+
+    @Test func attachmentSectionAccountsForNestedMultipart() throws {
+        let plain = Part(data: Data("Hi".utf8), contentTransferEncoding: .ascii, contentType: .text("plain", .utf8))
+        let html = Part(data: Data("<p>Hi</p>".utf8), contentTransferEncoding: .ascii, contentType: .text("html", .utf8))
+        let alternative = try Part(parts: [plain, html], contentType: .multipart("alternative"))
+        let attachment = Part(
+            data: Data("ZmlsZQ==".utf8),
+            contentDisposition: .attachment(.init(filename: "b.pdf", size: 4)),
+            contentTransferEncoding: .base64,
+            contentType: .application("pdf"))
+        let body = try MIME.Body(parts: [alternative, attachment], contentType: .multipart("mixed"))
+
+        let extracted = MessageBody(Message(body: body, envelope: Envelope(subject: "x")))
+        #expect(extracted.html == "<p>Hi</p>")  // Found inside the nested multipart/alternative
+        #expect(extracted.attachments.first?.section == [2])  // 2nd top-level part → BODY[2]
+        #expect(extracted.attachments.first?.encoding == "base64")
     }
 
     @Test func plainTextOnlyFallsBackToWrappedDisplayHTML() throws {

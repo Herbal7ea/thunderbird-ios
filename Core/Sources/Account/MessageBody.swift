@@ -15,6 +15,19 @@ public struct MessageBody: Sendable, Equatable {
         public let filename: String?
         public let contentType: String
         public let byteCount: Int
+        /// The MIME body section (e.g. `[2]` → `BODY[2]`), used to fetch this part on demand via
+        /// ``MessageManager/fetchAttachment(mailbox:uid:section:encoding:)``.
+        public let section: [Int]
+        /// The part's transfer encoding (raw value, e.g. `"base64"`), needed to decode fetched bytes.
+        public let encoding: String?
+
+        public init(filename: String?, contentType: String, byteCount: Int, section: [Int], encoding: String?) {
+            self.filename = filename
+            self.contentType = contentType
+            self.byteCount = byteCount
+            self.section = section
+            self.encoding = encoding
+        }
     }
 
     public let html: String?
@@ -47,22 +60,31 @@ public struct MessageBody: Sendable, Equatable {
         var plainText: String?
         var attachments: [Attachment] = []
         if let body: MIME.Body = message.body {
-            Self.walk(body.parts, html: &html, plainText: &plainText, attachments: &attachments)
+            Self.walk(body.parts, section: [], html: &html, plainText: &plainText, attachments: &attachments)
         }
         self.init(html: html, plainText: plainText, attachments: attachments)
     }
 
-    private static func walk(_ parts: [Part], html: inout String?, plainText: inout String?, attachments: inout [Attachment]) {
-        for part in parts {
+    /// Walk the MIME tree, tracking each part's IMAP section number (`section`): the top-level parts
+    /// are `[1]`, `[2]`, …; the children of a multipart part `[i]` are `[i, 1]`, `[i, 2]`, …, matching
+    /// RFC 3501 `BODY[<section>]` numbering so attachments can be re-fetched on demand.
+    private static func walk(_ parts: [Part], section prefix: [Int], html: inout String?, plainText: inout String?, attachments: inout [Attachment]) {
+        for (index, part) in parts.enumerated() {
+            let section: [Int] = prefix + [index + 1]
             if part.contentType.isMultipart {
                 if let nested: [Part] = try? part.parts {
-                    walk(nested, html: &html, plainText: &plainText, attachments: &attachments)
+                    walk(nested, section: section, html: &html, plainText: &plainText, attachments: &attachments)
                 }
                 continue
             }
             if case .attachment(let file) = part.contentDisposition {
                 attachments.append(
-                    Attachment(filename: file.filename, contentType: part.contentType.description, byteCount: file.size ?? part.data.count))
+                    Attachment(
+                        filename: file.filename,
+                        contentType: part.contentType.description,
+                        byteCount: file.size ?? part.data.count,
+                        section: section,
+                        encoding: part.contentTransferEncoding?.rawValue))
                 continue
             }
             switch part.contentType.subtype.lowercased() {
