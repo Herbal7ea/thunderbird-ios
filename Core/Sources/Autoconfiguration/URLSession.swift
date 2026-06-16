@@ -75,8 +75,11 @@ extension URLSession {
 
     private func exchange(_ urlRequest: URLRequest) async throws -> OAuth2.TokenResponse {
         let data: (Data, URLResponse) = try await data(for: urlRequest)
-        guard (data.1 as? HTTPURLResponse)?.statusCode == 200 else {
-            throw URLError(.userAuthenticationRequired)
+        let statusCode: Int = (data.1 as? HTTPURLResponse)?.statusCode ?? -1
+        guard statusCode == 200 else {
+            // Preserve the provider's error body (e.g. `invalid_grant`, `redirect_uri_mismatch`)
+            // so token-exchange failures are diagnosable rather than a generic auth error.
+            throw OAuth2.TokenError(statusCode: statusCode, body: String(data: data.0, encoding: .utf8))
         }
         return try JSONDecoder().decode(OAuth2.TokenResponse.self, from: data.0)
     }

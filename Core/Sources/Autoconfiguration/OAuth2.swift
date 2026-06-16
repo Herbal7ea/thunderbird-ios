@@ -25,6 +25,18 @@ public struct OAuth2: Decodable {
         }
     }
 
+    /// Failure from the token endpoint (authorization-code exchange or refresh), carrying the
+    /// HTTP status and the provider's error body so the cause is diagnosable.
+    public struct TokenError: LocalizedError, Sendable {
+        public let statusCode: Int
+        public let body: String?
+
+        public var errorDescription: String? {
+            let detail: String = (body?.isEmpty == false) ? body! : "no response body"
+            return "Sign-in failed (HTTP \(statusCode)): \(detail)"
+        }
+    }
+
     public struct Request: Equatable, Sendable {
         public let authURI: String
         public let tokenURI: String
