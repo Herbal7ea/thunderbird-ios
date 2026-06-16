@@ -122,8 +122,8 @@ struct EmailCellView: View {
         to: [EmailAddress("rheaThun@thundermail.com", label: "Rhea Thunderbird")],
         isUnread: true,
         isFlagged: true,
-        hasAttachments: true,
-        bodyText: "This is some nice long preview text for the email body."
+        bodyText: "This is some nice long preview text for the email body.",
+        hasAttachments: true
     )
 
     EmailCellView(email: email).environment(flags)
