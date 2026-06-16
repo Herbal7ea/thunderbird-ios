@@ -67,7 +67,7 @@ struct AccountInformation: View {
                         error: $error,
                         for: loginServer.username,
                         authenticationType: loginServer.authenticationType
-                    ).onChange(of: loginServer.authorization) {
+                    ) {
                         guard var account = account else { return }
                         var incomingServerInfo = account.incomingServer?.clone() ?? Server(.imap)
                         var outgoingServerInfo = account.outgoingServer?.clone() ?? Server(.smtp)
