@@ -175,6 +175,22 @@ extension Account {
         }
     }
 
+    /// Build a fresh, connected, authenticated IMAP client that is **not** shared in the pool.
+    ///
+    /// Long-lived work (e.g. IMAP IDLE in ``MessageManager/monitorInbox()``) needs its own
+    /// connection: the pooled ``imapClient`` is reused by ordinary fetches, and a client parked in
+    /// IDLE can't service them. Refreshes the incoming token first, like ``imapClient``.
+    func newIMAPClient() async throws -> IMAPClient {
+        try await refreshTokenIfNeeded()
+        guard let incomingServer else {
+            throw IMAPError.serverProtocolMismatch
+        }
+        let client: IMAPClient = IMAPClient(try IMAP.Server(incomingServer))
+        try await client.connect()
+        try await client.login()
+        return client
+    }
+
     private func connectedIMAPClient() async throws -> IMAPClient {
         if let client: IMAPClient = Self.clients[id] as? IMAPClient {
             // IMAP Client already exists for account ID; reconnect and return

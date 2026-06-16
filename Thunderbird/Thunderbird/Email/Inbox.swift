@@ -20,10 +20,15 @@ final class Inbox {
     var isLoading: Bool = false
     var errorMessage: String?
 
+    /// Backing task for the IMAP IDLE live-update stream, if running.
+    private var monitorTask: Task<Void, Never>?
+
     init(account: Account, modelContext: ModelContext) {
         self.account = account
         self.modelContext = modelContext
     }
+
+    deinit { monitorTask?.cancel() }
 
     /// Fetch the newest `count` INBOX messages and upsert them into the store.
     func refresh(count: Int = 50) async {
@@ -39,8 +44,40 @@ final class Inbox {
         }
     }
 
+    /// Start streaming live INBOX changes via IMAP IDLE, upserting pushed messages as they arrive.
+    ///
+    /// Idempotent: a second call while a monitor is running is a no-op. If the server doesn't support
+    /// IDLE (or the connection drops for good), the stream ends quietly and the view falls back to
+    /// load-on-appear and pull-to-refresh.
+    func startLiveUpdates() {
+        guard monitorTask == nil else { return }
+        let manager = MessageManager(account: account)
+        monitorTask = Task { [weak self] in
+            do {
+                for try await update in manager.monitorInbox() {
+                    guard let self else { return }
+                    switch update {
+                    case .added(let emails):
+                        try? self.upsert(emails)
+                    case .needsReconcile:
+                        await self.refresh()
+                    }
+                }
+            } catch {
+                // IDLE unsupported or the connection was lost; manual refresh remains available.
+            }
+            self?.monitorTask = nil
+        }
+    }
+
+    /// Stop streaming live updates (e.g. when the inbox leaves the screen).
+    func stopLiveUpdates() {
+        monitorTask?.cancel()
+        monitorTask = nil
+    }
+
     /// Insert new messages or refresh the mutable fields of ones already stored. Messages removed
-    /// server-side are not pruned yet (full sync is a later phase).
+    /// server-side are not pruned here (full sync is a later phase).
     private func upsert(_ emails: [EmailData]) throws {
         for data in emails {
             let id: String = data.id

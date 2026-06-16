@@ -4,6 +4,16 @@
 
 import Foundation
 
+/// A change to the monitored INBOX, surfaced by ``MessageManager/monitorInbox()``.
+public enum InboxUpdate: Sendable {
+    /// New messages arrived (newest first), already fetched at the envelope level — upsert directly.
+    case added([EmailData])
+
+    /// Messages were removed (or the count otherwise dropped) server-side; the caller should resync
+    /// (e.g. a full ``MessageManager/fetchInbox(count:)`` refresh).
+    case needsReconcile
+}
+
 /// Fetch and send messages for a given `Account`.
 ///
 /// A lightweight, `Sendable` service over an immutable `Account` — its methods can be called from
@@ -62,6 +72,131 @@ public final class MessageManager: Sendable {
             try? await client.markSeen(uid: imapUID)
         }
         return MessageBody(message)
+    }
+
+    /// Watch INBOX for changes in real time using IMAP IDLE, on a dedicated connection.
+    ///
+    /// Yields an ``InboxUpdate`` each time the server pushes a change (or the idle window lapses and
+    /// a poll finds one). Newly-arrived messages are fetched at the envelope level — the same shape
+    /// as ``fetchInbox(count:)`` — so the caller can upsert them directly; removals/decreases surface
+    /// as ``InboxUpdate/needsReconcile`` for the caller to resync.
+    ///
+    /// The IDLE loop runs detached, off the main actor. The stream finishes when the caller stops
+    /// iterating (cancelling the loop) or throws if IDLE is unsupported or the connection can't be
+    /// (re)established — callers should fall back to manual refresh in that case.
+    public func monitorInbox() -> AsyncThrowingStream<InboxUpdate, Error> {
+        let account: Account = self.account
+        return AsyncThrowingStream { continuation in
+            let task: Task = Task.detached {
+                do {
+                    try await Self.runInboxMonitor(account: account, continuation: continuation)
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    /// How long a single IDLE waits before waking to refresh the connection (RFC 2177 advises a
+    /// re-IDLE well under ~30 min so the server doesn't drop it).
+    private static let maxIdleSeconds: Int = 25 * 60
+
+    /// Which arm of an IDLE cycle completed first.
+    private enum IdleOutcome: Sendable, Equatable {
+        case changed       // server pushed an EXISTS/RECENT update
+        case reconcile     // server pushed an EXPUNGE
+        case bye           // server closed the connection
+        case streamEnded   // idle stream ended without a verdict
+        case windowElapsed // idle window lapsed; poll for changes
+    }
+
+    /// Drive the IDLE loop on a dedicated connection until the surrounding `Task` is cancelled.
+    private static func runInboxMonitor(
+        account: Account,
+        continuation: AsyncThrowingStream<InboxUpdate, Error>.Continuation
+    ) async throws {
+        guard account.emailProtocol == .imap else { return }
+        var connection: IMAPClient?
+        var inbox: IMAP.Mailbox?
+        var mailboxName: String = "INBOX"
+        var uidValidity: Int = 0
+        var known: Int = 0
+
+        // Connect (if needed), require IDLE, and select INBOX, capturing the baseline message count.
+        func ensureSelected() async throws {
+            if connection?.isConnected != true {
+                let client: IMAPClient = try await account.newIMAPClient()
+                try client.isSupported(.idle)  // capabilityNotSupported propagates to the caller
+                let mailboxes: [(IMAP.Mailbox, IMAP.Mailbox.Status?)] = try await client.list()
+                guard let box: IMAP.Mailbox = mailboxes.first(where: {
+                    $0.0.path.name.description.uppercased() == "INBOX"
+                })?.0 else {
+                    throw IMAPError.commandFailed("INBOX not found")
+                }
+                let status: IMAP.Mailbox.Status = try await client.select(mailbox: box)
+                connection = client
+                inbox = box
+                mailboxName = box.path.name.description
+                uidValidity = Int(status.uidValidityValue ?? 0)
+                known = status.messageCount ?? 0
+            }
+        }
+
+        defer { try? connection?.disconnect() }
+
+        while !Task.isCancelled {
+            try await ensureSelected()
+            guard let client: IMAPClient = connection, let box: IMAP.Mailbox = inbox else { break }
+
+            // Idle until the server pushes a change or the window lapses, whichever comes first.
+            let events: AsyncStream<IdleEvent> = try await client.idle()
+            let outcome: IdleOutcome = await withTaskGroup(of: IdleOutcome.self) { group in
+                group.addTask {  // Reader — captures only the Sendable event stream
+                    for await event in events {
+                        switch event {
+                        case .status: return .changed
+                        case .expunge: return .reconcile
+                        case .bye: return .bye
+                        case .fetch: continue
+                        }
+                    }
+                    return .streamEnded
+                }
+                group.addTask {  // Idle window — captures nothing
+                    try? await Task.sleep(for: .seconds(maxIdleSeconds))
+                    return .windowElapsed
+                }
+                let first: IdleOutcome = await group.next() ?? .streamEnded
+                group.cancelAll()
+                return first
+            }
+            if client.isIdling { try? await client.done() }
+            if Task.isCancelled { break }
+
+            switch outcome {
+            case .bye, .streamEnded:
+                try? client.disconnect()
+                connection = nil  // ensureSelected() rebuilds and re-baselines next iteration
+            case .changed, .reconcile, .windowElapsed:
+                // Re-select to read the authoritative current count (EXISTS pushes can be partial).
+                let status: IMAP.Mailbox.Status = try await client.select(mailbox: box)
+                let current: Int = status.messageCount ?? known
+                if current > known {
+                    let set = SequenceSet(known + 1 ... current)
+                    let messages: MessageSet = try await client.fetch(set, attributes: .standard)
+                    let added: [EmailData] = messages
+                        .sorted { $0.key > $1.key }
+                        .map { EmailData(accountID: account.id, mailbox: mailboxName, uidValidity: uidValidity, message: $0.value) }
+                    if !added.isEmpty { continuation.yield(.added(added)) }
+                    known = current
+                } else if current < known || outcome == .reconcile {
+                    continuation.yield(.needsReconcile)
+                    known = current
+                }
+            }
+        }
     }
 
     /// Send a composed message through the account's outgoing (SMTP) server.

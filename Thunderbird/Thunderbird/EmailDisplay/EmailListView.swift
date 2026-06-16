@@ -45,6 +45,7 @@ struct EmailListView: View {
             inbox = Inbox(account: account, modelContext: modelContext)
         }
         await inbox?.refresh()
+        inbox?.startLiveUpdates()  // Push new mail in real time via IMAP IDLE (Phase 5)
     }
 
     var body: some View {
