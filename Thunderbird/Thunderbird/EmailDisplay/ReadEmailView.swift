@@ -226,7 +226,32 @@ struct WebView: UIViewRepresentable {
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
-        webView.loadHTMLString(htmlString, baseURL: nil)
+        webView.loadHTMLString(Self.responsiveDocument(htmlString), baseURL: nil)
+    }
+
+    /// Wrap message HTML in a mobile-friendly document: a `width=device-width` viewport (without it
+    /// WKWebView lays out at a ~980px desktop width and shrinks everything), plus base styling that
+    /// constrains images to the screen and wraps long content. Works for both full HTML emails and
+    /// the plain-text `<pre>` fallback.
+    static func responsiveDocument(_ body: String) -> String {
+        """
+        <!DOCTYPE html>
+        <html>
+        <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          :root { color-scheme: light dark; }
+          html { -webkit-text-size-adjust: 100%; }
+          body { margin: 0; padding: 12px; font: -apple-system-body; line-height: 1.4; overflow-wrap: break-word; word-wrap: break-word; }
+          img, video { max-width: 100%; height: auto; }
+          table { max-width: 100%; }
+          pre { white-space: pre-wrap; word-wrap: break-word; }
+        </style>
+        </head>
+        <body>\(body)</body>
+        </html>
+        """
     }
 }
 
