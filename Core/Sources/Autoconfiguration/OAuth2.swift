@@ -25,7 +25,7 @@ public struct OAuth2: Decodable {
         }
     }
 
-    public struct Request: Equatable {
+    public struct Request: Equatable, Sendable {
         public let authURI: String
         public let tokenURI: String
         public let redirectURI: String

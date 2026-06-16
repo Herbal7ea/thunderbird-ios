@@ -72,7 +72,7 @@ extension OAuth2.Request: @retroactive CaseIterable {
     // MARK: Google
     static var google: Self {
         let configuration = GoogleOAuth2Configuration.bundled
-        try! Self(
+        return try! Self(
             authURI: "https://accounts.google.com/o/oauth2/v2/auth",
             tokenURI: "https://oauth2.googleapis.com/token",
             redirectURI: configuration.redirectURI,
