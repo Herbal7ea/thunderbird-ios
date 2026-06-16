@@ -638,14 +638,14 @@
 			isa = XCSwiftPackageProductDependency;
 			productName = Bolt;
 		};
+		15501F1D2F9666AB0041B309 /* Core */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Core;
+		};
 		FEEDBEEF000000000000F002 /* InfomaniakRichHTMLEditor */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = FEEDBEEF000000000000F003 /* XCRemoteSwiftPackageReference "swift-rich-html-editor" */;
 			productName = InfomaniakRichHTMLEditor;
-		};
-		15501F1D2F9666AB0041B309 /* Core */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = Core;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

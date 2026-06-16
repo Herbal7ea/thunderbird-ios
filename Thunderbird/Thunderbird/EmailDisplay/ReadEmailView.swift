@@ -21,6 +21,10 @@ struct ReadEmailView: View {
     @Environment(Accounts.self) private var accounts: Accounts
     @Environment(\.modelContext) private var modelContext
     @State private var isLoadingBody = false
+    @State private var draft: MessageDraft?
+
+    /// The signed-in account's identities, used to omit self from reply-all recipients.
+    private var identities: [EmailAddress] { accounts.allAccounts.first?.identities ?? [] }
 
     /// Fetch the full body on open (once), persist it, and mark the message read.
     private func loadBody() async {
@@ -52,7 +56,12 @@ struct ReadEmailView: View {
 
                 ScrollView {
                     VStack(alignment: .leading) {
-                        SenderView(email: email)
+                        SenderView(
+                            email: email,
+                            onReply: { draft = .reply(to: email) },
+                            onReplyAll: { draft = .replyAll(to: email, identities: identities) },
+                            onForward: { draft = .forward(email) }
+                        )
                         if isLoadingBody && (email.bodyText ?? "").isEmpty {
                             ProgressView().frame(maxWidth: .infinity)
                         }
@@ -62,6 +71,11 @@ struct ReadEmailView: View {
 
             }
             .task { await loadBody() }
+            .sheet(item: $draft) { draft in
+                if let account = accounts.allAccounts.first {
+                    ComposeView(account: account, draft: draft)
+                }
+            }
             .padding()
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
@@ -130,19 +144,13 @@ struct ReadEmailView: View {
                         }
                     }
                     ToolbarItem(placement: .bottomBar) {
-                        Button(action: {
-                            AlertManager.shared.showAlert = true
-                            AlertManager.shared.alertTitle = "Reply"
-                        }) {
+                        Button(action: { draft = .reply(to: email) }) {
                             Image(systemName: "arrowshape.turn.up.left")
                                 .foregroundStyle(.foreground)
                         }
                     }
                     ToolbarItem(placement: .bottomBar) {
-                        Button(action: {
-                            AlertManager.shared.showAlert = true
-                            AlertManager.shared.alertTitle = "Reply All"
-                        }) {
+                        Button(action: { draft = .replyAll(to: email, identities: identities) }) {
                             Image(systemName: "arrowshape.turn.up.left.2")
                                 .foregroundStyle(.foreground)
                         }
@@ -157,10 +165,7 @@ struct ReadEmailView: View {
                         }
                     }
                     ToolbarItem(placement: .bottomBar) {
-                        Button(action: {
-                            AlertManager.shared.showAlert = true
-                            AlertManager.shared.alertTitle = "Forward"
-                        }) {
+                        Button(action: { draft = .forward(email) }) {
                             Image(systemName: "arrowshape.turn.up.right")
                                 .foregroundStyle(.foreground)
                         }
@@ -226,13 +231,21 @@ struct WebView: UIViewRepresentable {
 }
 
 struct SenderView: View {
-    init(email: Email) {
+    init(
+        email: Email,
+        onReply: @escaping () -> Void = {},
+        onReplyAll: @escaping () -> Void = {},
+        onForward: @escaping () -> Void = {}
+    ) {
         from = email.from
         sender = email.sender
         recipients = email.cc
         toText = email.to
         date = email.date
         replyTo = email.replyTo
+        self.onReply = onReply
+        self.onReplyAll = onReplyAll
+        self.onForward = onForward
     }
     private var from: [EmailAddress]
     private var sender: [EmailAddress]
@@ -240,6 +253,9 @@ struct SenderView: View {
     private var recipients: [EmailAddress]
     private var toText: [EmailAddress]
     private var date: Date
+    private let onReply: () -> Void
+    private let onReplyAll: () -> Void
+    private let onForward: () -> Void
     @State private var showSenderRecipientInfo = false
     @State private var showEmailOptions = false
 
@@ -268,21 +284,9 @@ struct SenderView: View {
                     .font(.footnote)
                     .padding(.bottom, 4)
                 Menu {
-                    Button(
-                        "reply_button",
-                        action: {
-
-                        })
-                    Button(
-                        "reply_all_button",
-                        action: {
-
-                        })
-                    Button(
-                        "forward_button",
-                        action: {
-
-                        })
+                    Button("reply_button", action: onReply)
+                    Button("reply_all_button", action: onReplyAll)
+                    Button("forward_button", action: onForward)
                     Button(
                         "forward_as_button",
                         action: {

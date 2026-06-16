@@ -20,15 +20,25 @@ struct ComposeView: View {
 
     @Environment(\.dismiss) private var dismiss
 
-    @State private var to: String = ""
-    @State private var cc: String = ""
-    @State private var bcc: String = ""
-    @State private var subject: String = ""
-    @State private var html: String = ""
+    @State private var to: String
+    @State private var cc: String
+    @State private var bcc: String
+    @State private var subject: String
+    @State private var html: String
     @State private var phase: Phase = .editing
     @State private var errorMessage: String?
 
     @StateObject private var textAttributes = TextAttributes()
+
+    /// Open the composer for `account`, optionally prefilled (e.g. a reply or forward ``MessageDraft``).
+    init(account: Account, draft: MessageDraft = MessageDraft()) {
+        self.account = account
+        _to = State(initialValue: draft.to)
+        _cc = State(initialValue: draft.cc)
+        _bcc = State(initialValue: draft.bcc)
+        _subject = State(initialValue: draft.subject)
+        _html = State(initialValue: draft.html)
+    }
 
     private enum Phase: Equatable {
         case editing
