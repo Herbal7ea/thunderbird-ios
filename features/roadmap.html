@@ -32,7 +32,7 @@
     <a href="#phase3" class="sub">3A · SMTP XOAUTH2</a>
     <a href="#phase3" class="sub">3B · Send service</a>
     <a href="#phase3" class="sub">3C · ComposeView</a>
-    <a href="#later">Phases 4–9</a>
+    <a href="#later">Phases 5–9</a>
     <a href="#decisions">Decisions log</a>
   </aside>
 
@@ -43,20 +43,20 @@
 
     <h2 id="status">Status</h2>
     <div class="stat-grid">
-      <div class="stat-card success"><div class="sv">1–3</div><div class="sl">Phases done</div></div>
-      <div class="stat-card primary"><div class="sv">4</div><div class="sl">Next phase</div></div>
+      <div class="stat-card success"><div class="sv">1–4</div><div class="sl">Phases done</div></div>
+      <div class="stat-card primary"><div class="sv">5</div><div class="sl">Next phase</div></div>
       <div class="stat-card"><div class="sv">9</div><div class="sl">Phases planned</div></div>
-      <div class="stat-card"><div class="sv">6</div><div class="sl">Phases remaining</div></div>
+      <div class="stat-card"><div class="sv">5</div><div class="sl">Phases remaining</div></div>
     </div>
     <div class="callout success">
       <span class="ci">✓</span>
-      <span class="ct"><strong>Done — Phases 1–3 (OAuth, inbox, compose &amp; send)</strong>
-      PKCE sign-in, IMAP/SMTP-ready token persistence + refresh, a SwiftData-backed inbox list, full message reading, and a new-message composer that sends over SMTP <code>XOAUTH2</code>. See the <a href="../docs/oauth/index.html">Google OAuth</a> feature page.</span>
+      <span class="ct"><strong>Done — Phases 1–4 (OAuth, inbox, compose &amp; send, reply/forward)</strong>
+      PKCE sign-in, IMAP/SMTP-ready token persistence + refresh, a SwiftData-backed inbox list, full message reading, a rich-text composer that sends <code>multipart/alternative</code> over SMTP <code>XOAUTH2</code>, and reply / reply-all / forward. See the <a href="../docs/oauth/index.html">Google OAuth</a> feature page.</span>
     </div>
     <div class="callout info">
       <span class="ci">🧪</span>
-      <span class="ct"><strong>Phase 3 verification</strong>
-      The XOAUTH2 SASL encoding is covered by a Core unit test (<code>RequestEncoderTests</code>) and the Core package builds clean. The composer + end-to-end send still want a manual run in Xcode against the Gmail test account.</span>
+      <span class="ct"><strong>Verification</strong>
+      Core changes are unit-tested (XOAUTH2 SASL encoding, <code>multipart/alternative</code> body) and the Core package builds clean. The composer, send, and reply/forward flows still want a manual run in Xcode against the Gmail test account.</span>
     </div>
 
     <h2 id="roadmap">Roadmap</h2>
@@ -67,8 +67,8 @@
         <tr><td><span class="badge success">1 ✓</span></td><td>Google OAuth sign-in</td><td>Foundation</td><td>OAuth2, PKCE, IMAP XOAUTH2</td></tr>
         <tr><td><span class="badge success">2 ✓</span></td><td>Inbox + reading</td><td>See real mail</td><td>SwiftData, Inbox, MIME</td></tr>
         <tr><td><span class="badge success">3 ✓</span></td><td>Compose &amp; direct send</td><td>The other half of email</td><td>SMTP XOAUTH2, ComposeView</td></tr>
-        <tr><td><span class="badge primary">4 ▸</span></td><td>Reply / reply-all / forward</td><td>Extends compose</td><td>ReadEmailView, compose</td></tr>
-        <tr><td><span class="badge">5</span></td><td>Live updates (IMAP IDLE)</td><td>Small, high-impact</td><td>Inbox store</td></tr>
+        <tr><td><span class="badge success">4 ✓</span></td><td>Reply / reply-all / forward</td><td>Extends compose</td><td>ReadEmailView, compose</td></tr>
+        <tr><td><span class="badge primary">5 ▸</span></td><td>Live updates (IMAP IDLE)</td><td>Small, high-impact</td><td>Inbox store</td></tr>
         <tr><td><span class="badge">6</span></td><td>Attachment download</td><td>Builds on Phase 2 metadata</td><td>IMAP body-section fetch</td></tr>
         <tr><td><span class="badge">7</span></td><td>Outbox / queue</td><td>Send reliability + drafts</td><td>SwiftData, send pipeline</td></tr>
         <tr><td><span class="badge">8</span></td><td>Multi-account</td><td>Removes single-account assumption</td><td>DrawerView, @Query, Inbox</td></tr>
@@ -131,11 +131,11 @@
     </div>
     <p style="font-size:.85rem;color:hsl(var(--muted-foreground));margin-top:.75rem;">Validation: the XOAUTH2 SASL building is unit-testable in Core; the composer + send verify in Xcode against the Gmail test account.</p>
 
-    <h2 id="later">Phases 4–9</h2>
+    <h2 id="later">Phases 5–9</h2>
     <div class="accordion">
       <div class="accordion-item" id="p4">
-        <button class="accordion-trigger"><span class="num">4</span><span>Reply / reply-all / forward<span class="tt-sub">extends compose</span></span><span class="chev">▾</span></button>
-        <div class="accordion-content"><p>Wire <code>ReadEmailView</code>'s stubbed reply / reply-all / forward buttons to the composer, prefilling recipients and subject and quoting the original body. Builds directly on Phase 3's <code>ComposeView</code>.</p></div>
+        <button class="accordion-trigger"><span class="num">4 ✓</span><span>Reply / reply-all / forward<span class="tt-sub">done · extends compose</span></span><span class="chev">▾</span></button>
+        <div class="accordion-content"><p><strong>Done.</strong> <code>ReadEmailView</code>'s reply / reply-all / forward buttons (bottom toolbar + sender menu) open the composer via a <code>MessageDraft</code>: <code>Re:</code>/<code>Fwd:</code> subject prefixing, reply-to-or-from target selection, reply-all Cc from the original recipients minus self, and an HTML-quoted original (cite blockquote for replies, forwarded-message header for forwards). Builds directly on Phase 3's <code>ComposeView</code>.</p></div>
       </div>
       <div class="accordion-item" id="p5">
         <button class="accordion-trigger"><span class="num">5</span><span>Live updates (IMAP IDLE)<span class="tt-sub">Inbox store</span></span><span class="chev">▾</span></button>
