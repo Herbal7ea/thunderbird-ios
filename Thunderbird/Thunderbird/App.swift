@@ -23,7 +23,7 @@ struct App: SwiftUI.App {
                 }
             }
         }
-        .modelContainer(for: Email.self)
+        .modelContainer(for: [Email.self, OutgoingEmail.self])
         .onChange(of: AlertManager.shared.showAlert) {
             showAlert = AlertManager.shared.showAlert
         }

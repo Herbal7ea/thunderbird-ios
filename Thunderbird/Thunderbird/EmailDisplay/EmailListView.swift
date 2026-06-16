@@ -16,11 +16,13 @@ struct EmailListView: View {
     @Environment(Accounts.self) private var accounts: Accounts
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Email.date, order: .reverse) private var emails: [Email]
+    @Query private var outgoing: [OutgoingEmail]
     @State private var inbox: Inbox?
     @State var editMode: EditMode = .inactive
     @State private var selections = Set<String>()
     @State private var showDrawer = false
     @State private var showCompose = false
+    @State private var showOutbox = false
 
     func sortEmails() {
         //Not yet implemented
@@ -130,6 +132,16 @@ struct EmailListView: View {
                         Label("Account", systemImage: "line.3.horizontal").labelStyle(.iconOnly)
                     }
                 }
+                if !outgoing.isEmpty {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button {
+                            showOutbox = true
+                        } label: {
+                            Label("\(outgoing.count)", systemImage: "tray.and.arrow.up")
+                                .font(.footnote)
+                        }
+                    }
+                }
                 ToolbarItem(placement: .cancellationAction) {
                     if editMode.isEditing == true {
                         Button(
@@ -195,6 +207,9 @@ struct EmailListView: View {
                     ComposeView(account: account)
                 }
             }
+            .sheet(isPresented: $showOutbox) {
+                OutboxView()
+            }
         }
     }
 }
@@ -205,5 +220,6 @@ struct EmailListView: View {
     EmailListView()
         .environment(flags)
         .environment(accounts)
-        .modelContainer(for: Email.self, inMemory: true)
+        .environment(Outbox())
+        .modelContainer(for: [Email.self, OutgoingEmail.self], inMemory: true)
 }

@@ -5,28 +5,25 @@
 import Account
 import EmailAddress
 import InfomaniakRichHTMLEditor
-import MIME
-import SMTP
 import SwiftUI
 
-/// Compose and directly send a new message through the account's outgoing (SMTP) server.
+/// Compose a new message and hand it to the ``Outbox`` for delivery.
 ///
-/// The body is edited with Infomaniak's `RichHTMLEditor` and sent as `text/html`.
-///
-/// Phase 3 scope: new messages only (reply/forward is Phase 4) and direct send with inline result
-/// (the persisted outbox/queue is Phase 7).
+/// The body is edited with Infomaniak's `RichHTMLEditor` and sent as `multipart/alternative`
+/// (plain-text + `text/html`). Sending is queued (Phase 7): the composer dismisses immediately and
+/// the outbox delivers in the background with retry, so a transient failure or being offline doesn't
+/// lose the message.
 struct ComposeView: View {
     let account: Account
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(Outbox.self) private var outbox
 
     @State private var to: String
     @State private var cc: String
     @State private var bcc: String
     @State private var subject: String
     @State private var html: String
-    @State private var phase: Phase = .editing
-    @State private var errorMessage: String?
 
     @StateObject private var textAttributes = TextAttributes()
 
@@ -40,16 +37,11 @@ struct ComposeView: View {
         _html = State(initialValue: draft.html)
     }
 
-    private enum Phase: Equatable {
-        case editing
-        case sending
-    }
-
     /// The address mail is sent from — the account's first configured identity.
     private var sender: EmailAddress? { account.identities.first }
 
     private var canSend: Bool {
-        phase == .editing && sender != nil && !recipients(to).isEmpty
+        sender != nil && !recipients(to).isEmpty
     }
 
     var body: some View {
@@ -79,19 +71,9 @@ struct ComposeView: View {
                     .padding(.horizontal, 8)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                if let errorMessage {
-                    Text(errorMessage)
-                        .font(.footnote)
-                        .foregroundStyle(.red)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal)
-                        .padding(.bottom, 4)
-                }
-
                 Divider()
                 formatBar
             }
-            .disabled(phase == .sending)
             .navigationTitle("New Message")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -99,12 +81,8 @@ struct ComposeView: View {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    if phase == .sending {
-                        ProgressView()
-                    } else {
-                        Button("Send") { Task { await send() } }
-                            .disabled(!canSend)
-                    }
+                    Button("Send") { send() }
+                        .disabled(!canSend)
                 }
             }
         }
@@ -180,25 +158,18 @@ struct ComposeView: View {
             .filter { !$0.value.isEmpty }
     }
 
-    private func send() async {
+    /// Queue the message for delivery and dismiss; the ``Outbox`` sends it in the background.
+    private func send() {
         guard let sender else { return }
-        errorMessage = nil
-        phase = .sending
-        do {
-            let body = try MIME.Body.alternative(plainText: plainText(fromHTML: html), html: html)
-            let email = SMTP.Email(
-                sender: sender,
-                recipients: recipients(to),
-                copied: recipients(cc),
-                blindCopied: recipients(bcc),
-                subject: subject,
-                body: body
-            )
-            try await MessageManager(account: account).send(email)
-            dismiss()
-        } catch {
-            errorMessage = "\(error)"
-            phase = .editing
-        }
+        outbox.enqueue(
+            account: account,
+            sender: sender,
+            to: recipients(to),
+            cc: recipients(cc),
+            bcc: recipients(bcc),
+            subject: subject,
+            html: html,
+            plainText: plainText(fromHTML: html))
+        dismiss()
     }
 }

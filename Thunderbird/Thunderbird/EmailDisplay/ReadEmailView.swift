@@ -505,5 +505,6 @@ struct ContactCellView: View {
 
     ReadEmailView(email)
         .environment(Accounts())
-        .modelContainer(for: Email.self, inMemory: true)
+        .environment(Outbox())
+        .modelContainer(for: [Email.self, OutgoingEmail.self], inMemory: true)
 }
