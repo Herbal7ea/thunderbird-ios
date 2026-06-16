@@ -39,24 +39,24 @@
   <main class="content">
     <span class="eyebrow">Planning</span>
     <h1>Email Client Roadmap</h1>
-    <p class="lead">The phased plan beyond Google OAuth. Phases&nbsp;1–2 are complete (sign-in + a live, readable inbox); each remaining workstream is its own phase, send-story first, then receive-side, then infrastructure.</p>
+    <p class="lead">The phased plan beyond Google OAuth, now fully implemented. All nine workstreams are done — sign-in, a live readable inbox, compose/send, reply/forward, IMAP IDLE live updates, attachment download, a persisted outbox, multi-account, and two-way server sync.</p>
 
     <h2 id="status">Status</h2>
     <div class="stat-grid">
-      <div class="stat-card success"><div class="sv">1–4</div><div class="sl">Phases done</div></div>
-      <div class="stat-card primary"><div class="sv">5</div><div class="sl">Next phase</div></div>
+      <div class="stat-card success"><div class="sv">1–9</div><div class="sl">Phases done</div></div>
+      <div class="stat-card primary"><div class="sv">—</div><div class="sl">Next phase</div></div>
       <div class="stat-card"><div class="sv">9</div><div class="sl">Phases planned</div></div>
-      <div class="stat-card"><div class="sv">5</div><div class="sl">Phases remaining</div></div>
+      <div class="stat-card"><div class="sv">0</div><div class="sl">Phases remaining</div></div>
     </div>
     <div class="callout success">
       <span class="ci">✓</span>
-      <span class="ct"><strong>Done — Phases 1–4 (OAuth, inbox, compose &amp; send, reply/forward)</strong>
-      PKCE sign-in, IMAP/SMTP-ready token persistence + refresh, a SwiftData-backed inbox list, full message reading, a rich-text composer that sends <code>multipart/alternative</code> over SMTP <code>XOAUTH2</code>, and reply / reply-all / forward. See the <a href="../docs/oauth/index.html">Google OAuth</a> feature page.</span>
+      <span class="ct"><strong>Done — all 9 phases</strong>
+      Phases 1–4: PKCE sign-in, IMAP/SMTP-ready token persistence + refresh, a SwiftData-backed inbox list, full message reading, a rich-text composer that sends <code>multipart/alternative</code> over SMTP <code>XOAUTH2</code>, and reply / reply-all / forward. Phases 5–9: live updates over IMAP IDLE, on-demand attachment download, a persisted outbox with retry, multi-account with an inbox switcher, and server sync (deletion pruning, pagination, two-way flag reconciliation). See the <a href="../docs/oauth/index.html">Google OAuth</a> feature page.</span>
     </div>
     <div class="callout info">
       <span class="ci">🧪</span>
       <span class="ct"><strong>Verification</strong>
-      Core changes are unit-tested (XOAUTH2 SASL encoding, <code>multipart/alternative</code> body) and the Core package builds clean. The composer, send, and reply/forward flows still want a manual run in Xcode against the Gmail test account.</span>
+      Core changes are unit-tested (XOAUTH2 SASL encoding, <code>multipart/alternative</code> body, transfer-decode, MIME section numbering) and the Core package builds clean. The live-update, attachment, outbox, multi-account, and sync flows still want a manual run in Xcode against the Gmail test account.</span>
     </div>
 
     <h2 id="roadmap">Roadmap</h2>
@@ -68,11 +68,11 @@
         <tr><td><span class="badge success">2 ✓</span></td><td>Inbox + reading</td><td>See real mail</td><td>SwiftData, Inbox, MIME</td></tr>
         <tr><td><span class="badge success">3 ✓</span></td><td>Compose &amp; direct send</td><td>The other half of email</td><td>SMTP XOAUTH2, ComposeView</td></tr>
         <tr><td><span class="badge success">4 ✓</span></td><td>Reply / reply-all / forward</td><td>Extends compose</td><td>ReadEmailView, compose</td></tr>
-        <tr><td><span class="badge primary">5 ▸</span></td><td>Live updates (IMAP IDLE)</td><td>Small, high-impact</td><td>Inbox store</td></tr>
-        <tr><td><span class="badge">6</span></td><td>Attachment download</td><td>Builds on Phase 2 metadata</td><td>IMAP body-section fetch</td></tr>
-        <tr><td><span class="badge">7</span></td><td>Outbox / queue</td><td>Send reliability + drafts</td><td>SwiftData, send pipeline</td></tr>
-        <tr><td><span class="badge">8</span></td><td>Multi-account</td><td>Removes single-account assumption</td><td>DrawerView, @Query, Inbox</td></tr>
-        <tr><td><span class="badge">9</span></td><td>Server sync &amp; pruning</td><td>Most infrastructural; last</td><td>Inbox, MessageManager, SwiftData</td></tr>
+        <tr><td><span class="badge success">5 ✓</span></td><td>Live updates (IMAP IDLE)</td><td>Small, high-impact</td><td>Inbox store</td></tr>
+        <tr><td><span class="badge success">6 ✓</span></td><td>Attachment download</td><td>Builds on Phase 2 metadata</td><td>IMAP body-section fetch</td></tr>
+        <tr><td><span class="badge success">7 ✓</span></td><td>Outbox / queue</td><td>Send reliability + drafts</td><td>SwiftData, send pipeline</td></tr>
+        <tr><td><span class="badge success">8 ✓</span></td><td>Multi-account</td><td>Removes single-account assumption</td><td>DrawerView, @Query, Inbox</td></tr>
+        <tr><td><span class="badge success">9 ✓</span></td><td>Server sync &amp; pruning</td><td>Most infrastructural; last</td><td>Inbox, MessageManager, SwiftData</td></tr>
       </tbody>
     </table></div>
 
@@ -138,24 +138,24 @@
         <div class="accordion-content"><p><strong>Done.</strong> <code>ReadEmailView</code>'s reply / reply-all / forward buttons (bottom toolbar + sender menu) open the composer via a <code>MessageDraft</code>: <code>Re:</code>/<code>Fwd:</code> subject prefixing, reply-to-or-from target selection, reply-all Cc from the original recipients minus self, and an HTML-quoted original (cite blockquote for replies, forwarded-message header for forwards). Builds directly on Phase 3's <code>ComposeView</code>.</p></div>
       </div>
       <div class="accordion-item" id="p5">
-        <button class="accordion-trigger"><span class="num">5</span><span>Live updates (IMAP IDLE)<span class="tt-sub">Inbox store</span></span><span class="chev">▾</span></button>
-        <div class="accordion-content"><p>Use the existing <code>IMAPClient.idle()</code>/<code>done()</code> to push new mail into the inbox in real time, instead of only load-on-appear and pull-to-refresh. Small and self-contained — touches only the <code>Inbox</code> store.</p></div>
+        <button class="accordion-trigger"><span class="num">5 ✓</span><span>Live updates (IMAP IDLE)<span class="tt-sub">done · Inbox store</span></span><span class="chev">▾</span></button>
+        <div class="accordion-content"><p><strong>Done.</strong> <code>MessageManager.monitorInbox()</code> runs an IMAP IDLE loop on a <em>dedicated</em> connection (<code>Account.newIMAPClient()</code>, so it never blocks pooled fetches), re-selecting INBOX on each wake to fetch newly-arrived envelopes (<code>InboxUpdate.added</code>) or signal <code>needsReconcile</code> on removals, re-IDLEing on a 25-min window and reconnecting on <code>BYE</code>. <code>Inbox.startLiveUpdates()</code> streams pushes into the existing upsert; <code>EmailListView</code> starts it after the first load and falls back to pull-to-refresh when IDLE is unsupported.</p></div>
       </div>
       <div class="accordion-item" id="p6">
-        <button class="accordion-trigger"><span class="num">6</span><span>Attachment download<span class="tt-sub">IMAP body-section fetch</span></span><span class="chev">▾</span></button>
-        <div class="accordion-content"><p>Fetch attachment body-sections on demand and save / Quick Look them. The metadata (filename, type, size) is already extracted into <code>MessageBody.Attachment</code> in Phase 2 — this adds the data fetch and a viewer.</p></div>
+        <button class="accordion-trigger"><span class="num">6 ✓</span><span>Attachment download<span class="tt-sub">done · IMAP body-section fetch</span></span><span class="chev">▾</span></button>
+        <div class="accordion-content"><p><strong>Done.</strong> <code>MessageBody.Attachment</code> now carries its RFC 3501 section path + transfer encoding (the MIME walk tracks section numbers); <code>IMAPClient.fetch(uid:section:)</code> fetches just <code>BODY[section]</code> and <code>Data.transferDecoded(_:)</code> decodes base64 / quoted-printable to bytes. <code>Email</code> persists lightweight <code>AttachmentInfo</code> descriptors, and <code>ReadEmailView</code> lists attachments with a type icon + size; tapping downloads the bytes to a temp file and opens Quick Look.</p></div>
       </div>
       <div class="accordion-item" id="p7">
-        <button class="accordion-trigger"><span class="num">7</span><span>Outbox / queue<span class="tt-sub">SwiftData + send pipeline</span></span><span class="chev">▾</span></button>
-        <div class="accordion-content"><p>Persist outgoing mail (drafts + queued sends) in SwiftData, send via a queue with retry, and survive failure / relaunch / offline. The "then 2" upgrade to Phase 3's direct send.</p></div>
+        <button class="accordion-trigger"><span class="num">7 ✓</span><span>Outbox / queue<span class="tt-sub">done · SwiftData + send pipeline</span></span><span class="chev">▾</span></button>
+        <div class="accordion-content"><p><strong>Done.</strong> Compose hands messages to a SwiftData-backed <code>OutgoingEmail</code> queue and dismisses immediately; the <code>Outbox</code> manager drains it oldest-first over SMTP, deletes on success, and retries failures with capped exponential back-off (5 attempts), surviving relaunch and offline. <code>OutboxView</code> lists queued/sending/failed messages with swipe retry/delete, and <code>EmailListView</code> shows a count + entry point when the queue is non-empty.</p></div>
       </div>
       <div class="accordion-item" id="p8">
-        <button class="accordion-trigger"><span class="num">8</span><span>Multi-account<span class="tt-sub">DrawerView · @Query · Inbox</span></span><span class="chev">▾</span></button>
-        <div class="accordion-content"><p>An account switcher (<code>DrawerView</code>) with account-filtered queries and a per-account <code>Inbox</code>, removing today's <code>allAccounts.first</code> assumption. Reshapes the <code>Inbox</code>/<code>@Query</code> that Phase 9 then syncs — hence 8 before 9.</p></div>
+        <button class="accordion-trigger"><span class="num">8 ✓</span><span>Multi-account<span class="tt-sub">done · DrawerView · @Query · Inbox</span></span><span class="chev">▾</span></button>
+        <div class="accordion-content"><p><strong>Done.</strong> <code>EmailListView</code> tracks a persisted <code>selectedAccountID</code>, shows that account's INBOX (filtering the all-accounts <code>@Query</code>), and rebuilds the per-account <code>Inbox</code> + IDLE stream on switch; <code>DrawerView</code> gained an account switcher. <code>ReadEmailView</code> resolves the owning account by the message's own <code>accountID</code> (body load, attachments, reply/forward all use the right credentials), and <code>ContentView</code>'s auth gate passes if <em>any</em> account is authorized.</p></div>
       </div>
       <div class="accordion-item" id="p9">
-        <button class="accordion-trigger"><span class="num">9</span><span>Server sync &amp; pruning<span class="tt-sub">Inbox · MessageManager · SwiftData</span></span><span class="chev">▾</span></button>
-        <div class="accordion-content"><p>Detect server-side deletions, paginate beyond the newest page, and reconcile flags two-way. The most infrastructural work — best once compose, live updates, and multi-account are stable.</p></div>
+        <button class="accordion-trigger"><span class="num">9 ✓</span><span>Server sync &amp; pruning<span class="tt-sub">done · Inbox · MessageManager · SwiftData</span></span><span class="chev">▾</span></button>
+        <div class="accordion-content"><p><strong>Done.</strong> Refresh prunes messages deleted server-side (a fetched page is a contiguous UID window, so stored messages in that window absent from the page are removed; the newest page is authoritative at/above its lowest UID). <code>Inbox.loadMore()</code> pages in older messages via <code>fetchInbox(count:olderThan:)</code>, and <code>setRead</code>/<code>setFlagged</code>/<code>markAllRead</code> push <code>\Seen</code>/<code>\Flagged</code> through <code>IMAPClient.store(uid:flag:enabled:)</code> — flags reconcile both ways. Scroll-to-end paginates; swipes toggle read/flag.</p></div>
       </div>
     </div>
 
