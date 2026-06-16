@@ -20,8 +20,11 @@ struct OAuthButton: View {
     @Binding private var error: Error?
     @Environment(\.webAuthenticationSession) private var webAuthenticationSession
     @State private var request: OAuth2.Request?
+    @State private var isAuthenticating: Bool = false
 
     private func authenticate() async {
+        isAuthenticating = true
+        defer { isAuthenticating = false }
         do {
             error = nil
             guard let request else { return }
@@ -51,6 +54,9 @@ struct OAuthButton: View {
                 expiry: response.expiry(),
                 tokenURI: request.tokenURI,
                 clientID: request.clientID)
+        } catch let error as ASWebAuthenticationSessionError where error.code == .canceledLogin {
+            // User dismissed the web sheet; not an error worth surfacing.
+            self.error = nil
         } catch {
             self.error = error
         }
@@ -72,11 +78,15 @@ struct OAuthButton: View {
                 await authenticate()
             }
         }) {
-            Text("account_oauth_sign_in_button")
+            if isAuthenticating {
+                ProgressView()
+            } else {
+                Text("account_oauth_sign_in_button")
+            }
         }
         .buttonStyle(.borderedProminent)
         .tint(.accent)
-        .disabled(request == nil)
+        .disabled(request == nil || isAuthenticating)
         .task {
             await configure()
         }

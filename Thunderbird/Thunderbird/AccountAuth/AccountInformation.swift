@@ -77,6 +77,12 @@ struct AccountInformation: View {
                         accounts.set(account)
                     }
                 }
+                if let error {
+                    Label(error.localizedDescription, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.red)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                }
             }
             if error != nil || showManual {
                 Button(
