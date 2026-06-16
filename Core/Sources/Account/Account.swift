@@ -10,7 +10,7 @@
 @_exported import SMTP
 import Foundation
 
-public struct Account: Codable, Equatable, Hashable, Identifiable {
+public struct Account: Codable, Equatable, Hashable, Identifiable, Sendable {
     public enum EmailProtocol: String, CaseIterable, CustomStringConvertible, Identifiable {
         case imap = "IMAP/SMTP"
         case jmap = "JMAP"

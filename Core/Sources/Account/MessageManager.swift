@@ -4,11 +4,12 @@
 
 import Foundation
 
-/// Fetch and display messages for a given `Account`.
-@Observable
-public final class MessageManager {
+/// Fetch and send messages for a given `Account`.
+///
+/// A lightweight, `Sendable` service over an immutable `Account` — its methods can be called from
+/// any actor (e.g. a `@MainActor` view model awaiting an off-actor IMAP/SMTP operation).
+public final class MessageManager: Sendable {
     public let account: Account
-    public var error: AccountError?
 
     public init(account: Account) {
         self.account = account
@@ -93,7 +94,6 @@ public final class MessageManager {
                 print("  • \(email.subject.isEmpty ? "(no subject)" : email.subject)")
             }
         } catch {
-            self.error = AccountError(error)
             print("OAuth fetch error: \(error)")
         }
     }
